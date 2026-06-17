@@ -1,1 +1,21 @@
-test-data
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Wails build output
+build/bin/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Wails generated bindings (regenerated on every build)
+frontend/wailsjs/
+
+# Test data (game files, not part of source)
+test-data/
