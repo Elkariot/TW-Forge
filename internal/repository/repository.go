@@ -1,6 +1,10 @@
 package repository
 
-import "modding-utils/internal/domain"
+import (
+	"fmt"
+	"modding-utils/internal/domain"
+	"slices"
+)
 
 type GameRepository interface {
 	// Factions
@@ -9,7 +13,7 @@ type GameRepository interface {
 
 	// Units
 	GetAllUnits() []domain.Unit
-	GetUnitsByFaction(faction string) []domain.Unit
+	GetUnitsByFaction(faction string) ([]domain.Unit, error)
 	GetUnitByType(unitType string) (domain.Unit, bool)
 
 	// Buildings
@@ -60,22 +64,42 @@ func (r *InMemoryRepository) GetFactionByName(name string) (domain.Faction, bool
 		if f.Name == name {
 			faction = f
 			isFind = true
+			return faction, isFind
 		}
 	}
-	
+
 	return faction, isFind
 }
 
 func (r *InMemoryRepository) GetAllUnits() []domain.Unit {
-	panic("not implemented")
+	return r.working.Units
 }
 
-func (r *InMemoryRepository) GetUnitsByFaction(faction string) []domain.Unit {
-	panic("not implemented")
+func (r *InMemoryRepository) GetUnitsByFaction(faction string) ([]domain.Unit, error) {
+	if _, isFind := r.GetFactionByName(faction); !isFind {
+		return nil, fmt.Errorf("faction not found")
+	}
+
+	var units []domain.Unit
+
+	for _, unit := range r.working.Units {
+		if slices.Contains(unit.Ownership, faction) {
+			units = append(units, unit)
+		}
+	}
+
+	return units, nil
 }
+
 
 func (r *InMemoryRepository) GetUnitByType(unitType string) (domain.Unit, bool) {
-	panic("not implemented")
+	for _, u := range r.working.Units {
+		if u.Type == unitType {
+			return u, true
+		}
+	}
+
+	return domain.Unit{}, false
 }
 
 func (r *InMemoryRepository) GetBuildings() []domain.BuildingGroup {
