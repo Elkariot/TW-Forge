@@ -30,7 +30,7 @@ type GameRepository interface {
 
 	// Mutations
 	AddUnit(unit domain.Unit) error
-	UpdateUnit(unit domain.Unit) error
+	UpdateUnit(originalType string, unit domain.Unit) error
 	DeleteUnit(unitType string) error
 
 	// Revert
@@ -40,11 +40,13 @@ type GameRepository interface {
 	// Persistence
 	HasUnsavedChanges() bool
 	GetChanges() map[string]ChangeType
+	SaveDraft() error
 	Save() error
 }
 
 type Writer interface {
-	Write(data domain.GameData, changes map[string]ChangeType) error
+	SaveDraft(data domain.GameData, changes map[string]ChangeType) error
+	Apply() error
 }
 
 type InMemoryRepository struct {
@@ -120,18 +122,21 @@ func (r *InMemoryRepository) AddUnit(unit domain.Unit) error {
 	return nil
 }
 
-func (r *InMemoryRepository) UpdateUnit(unit domain.Unit) error {
+func (r *InMemoryRepository) UpdateUnit(originalType string, unit domain.Unit) error {
 	for i, u := range r.working.Units {
-		if u.Type == unit.Type {
+		if u.Type == originalType {
 			r.working.Units[i] = unit
-			// не перезаписываем ChangeAdded — новый юнит остаётся новым
-			if r.changes[unit.Type] != ChangeAdded {
-				r.changes[unit.Type] = ChangeModified
+			if originalType != unit.Type {
+				// Переименование: удаляем старый блок из файла, добавляем новый в конец
+				r.changes[originalType] = ChangeDeleted
+				r.changes[unit.Type] = ChangeAdded
+			} else if r.changes[originalType] != ChangeAdded {
+				r.changes[originalType] = ChangeModified
 			}
 			return nil
 		}
 	}
-	return fmt.Errorf("unit %q not found", unit.Type)
+	return fmt.Errorf("unit %q not found", originalType)
 }
 
 func (r *InMemoryRepository) DeleteUnit(unitType string) error {
@@ -200,9 +205,16 @@ func (r *InMemoryRepository) GetChanges() map[string]ChangeType {
 	return r.changes
 }
 
+func (r *InMemoryRepository) SaveDraft() error {
+	if r.writer == nil {
+		return fmt.Errorf("writer not configured")
+	}
+	return r.writer.SaveDraft(r.working, r.changes)
+}
+
 func (r *InMemoryRepository) Save() error {
 	if r.writer == nil {
 		return fmt.Errorf("writer not configured")
 	}
-	return r.writer.Write(r.working, r.changes)
+	return r.writer.Apply()
 }

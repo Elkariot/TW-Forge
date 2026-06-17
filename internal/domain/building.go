@@ -18,6 +18,6 @@ type BuildingLevel struct {
 type RecruitSlot struct {
 	UnitType   string
 	Level      int
-	Factions   []string
+	Cultures   []string
 	Conditions string
 }

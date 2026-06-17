@@ -408,7 +408,7 @@ func parseRecruitLine(line string) (domain.RecruitSlot, bool) {
 	return domain.RecruitSlot{
 		UnitType:   unitType,
 		Level:      level,
-		Factions:   factions,
+		Cultures:   factions,
 		Conditions: conditions,
 	}, true
 }

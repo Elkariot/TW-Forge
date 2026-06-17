@@ -1,7 +1,7 @@
 TAGS := webkit2_41
 
 dev:
-	wails dev -tags $(TAGS)
+	WEBKIT_DISABLE_DMABUF_RENDERER=1 wails dev -tags $(TAGS)
 
 build:
 	wails build -tags $(TAGS)

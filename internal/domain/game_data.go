@@ -43,7 +43,7 @@ func copyBuilding(b BuildingGroup) BuildingGroup {
 		l.Upgrades = copyStrings(l.Upgrades)
 		slots := make([]RecruitSlot, len(l.RecruitSlots))
 		for j, s := range l.RecruitSlots {
-			s.Factions = copyStrings(s.Factions)
+			s.Cultures = copyStrings(s.Cultures)
 			slots[j] = s
 		}
 		l.RecruitSlots = slots

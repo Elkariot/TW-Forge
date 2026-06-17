@@ -18,13 +18,8 @@ func (s *UnitService) GetFactions() []domain.Faction {
 	return s.repo.GetFactions()
 }
 
-// GetByFaction возвращает юнитов выбранной фракции.
 func (s *UnitService) GetByFaction(faction string) ([]domain.Unit, error) {
-	units, err := s.repo.GetUnitsByFaction(faction); if err != nil {
-		return nil, err
-	}
-
-	return units, err
+	return s.repo.GetUnitsByFaction(faction)
 }
 
 func (s *UnitService) GetFactionUnitsByCategoryAndClass(faction string) (map[string]map[string][]domain.Unit, error) {
@@ -45,35 +40,50 @@ func (s *UnitService) GetFactionUnitsByCategoryAndClass(faction string) (map[str
 }
 
 func (s *UnitService) GetUnitByType(unitType string) (*domain.Unit, error) {
-	unit, isFind := s.repo.GetUnitByType(unitType); if !isFind {
+	unit, ok := s.repo.GetUnitByType(unitType)
+	if !ok {
 		return nil, fmt.Errorf("unit not found")
 	}
-
 	return &unit, nil
 }
 
-// CopyUnit создаёт копию юнита exclusively для одной фракции.
-// Новый тип = оригинальный тип + "_" + faction.
+func (s *UnitService) Update(originalType string, unit domain.Unit) error {
+	if err := s.repo.UpdateUnit(originalType, unit); err != nil {
+		return err
+	}
+	return s.repo.SaveDraft()
+}
+
+func (s *UnitService) Create(unit domain.Unit) error {
+	if err := s.repo.AddUnit(unit); err != nil {
+		return err
+	}
+	return s.repo.SaveDraft()
+}
+
+func (s *UnitService) Delete(unitType string) error {
+	if err := s.repo.DeleteUnit(unitType); err != nil {
+		return err
+	}
+	return s.repo.SaveDraft()
+}
+
 func (s *UnitService) CopyUnit(unitType, faction string) error {
 	panic("not implemented")
 }
 
-// Update сохраняет изменённые характеристики юнита в репозиторий.
-func (s *UnitService) Update(unit domain.Unit) error {
-	panic("not implemented")
-}
-
-// Create добавляет новый юнит на основе шаблона.
-func (s *UnitService) Create(unit domain.Unit) error {
-	panic("not implemented")
-}
-
-// Delete удаляет юнита и его записи из зданий.
-func (s *UnitService) Delete(unitType string) error {
-	panic("not implemented")
-}
-
-// Revert откатывает изменения одного юнита до исходного состояния.
 func (s *UnitService) Revert(unitType string) error {
-	panic("not implemented")
+	return s.repo.RevertUnit(unitType)
+}
+
+func (s *UnitService) RevertAll() {
+	s.repo.RevertAll()
+}
+
+func (s *UnitService) HasUnsavedChanges() bool {
+	return s.repo.HasUnsavedChanges()
+}
+
+func (s *UnitService) Save() error {
+	return s.repo.Save()
 }
