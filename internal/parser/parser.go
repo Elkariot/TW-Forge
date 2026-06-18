@@ -33,14 +33,9 @@ func New(gameVersion config.GameVersion, gamePath string) *Parser {
 }
 
 func (p *Parser) ParseTextFiles() (*domain.GameData, error) {
-	factionNames, err := p.parseFactions()
+	factions, err := p.parseFactions()
 	if err != nil {
 		return nil, fmt.Errorf("parse factions error: %w", err)
-	}
-
-	factions := make([]domain.Faction, len(factionNames))
-	for i, name := range factionNames {
-		factions[i] = domain.Faction{Name: name}
 	}
 
 	units, err := p.parseUnits()
@@ -54,10 +49,70 @@ func (p *Parser) ParseTextFiles() (*domain.GameData, error) {
 	}
 
 	return &domain.GameData{
-		Units:     units,
-		Buildings: buildings,
-		Factions:  factions,
+		Units:                units,
+		Buildings:            buildings,
+		Factions:             factions,
+		UnitRecruitIndex:     domain.BuildRecruitIndex(buildings),
+		CultureBuildingIndex: domain.BuildCultureBuildingIndex(buildings),
+		Cultures:             p.parseCultureNames(),
+		ProjectileTypes:      p.parseProjectileTypes(),
 	}, nil
+}
+
+var defaultCultures = []string{"roman", "barbarian", "carthaginian", "greek", "egyptian", "eastern"}
+
+func (p *Parser) parseCultureNames() []string {
+	path := filepath.Join(p.GamePath, "descr_cultures.txt")
+	file, err := os.Open(path)
+	if err != nil {
+		return defaultCultures
+	}
+	defer file.Close()
+
+	var cultures []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) >= 2 && fields[0] == "culture" {
+			cultures = append(cultures, fields[1])
+		}
+	}
+	if len(cultures) == 0 {
+		return defaultCultures
+	}
+	return cultures
+}
+
+var defaultProjectiles = []string{"no", "arrow", "javelin", "pilum", "bullet", "stone", "head", "bolt", "dart", "ballista", "scorpion"}
+
+func (p *Parser) parseProjectileTypes() []string {
+	path := filepath.Join(p.GamePath, "descr_projectile_new.txt")
+	if _, err := os.Stat(path); err != nil {
+		path = filepath.Join(p.GamePath, "descr_projectile.txt")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return defaultProjectiles
+	}
+	defer file.Close()
+
+	seen := map[string]bool{"no": true}
+	projectiles := []string{"no"}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) >= 2 && fields[0] == "projectile" {
+			name := fields[1]
+			if !seen[name] {
+				seen[name] = true
+				projectiles = append(projectiles, name)
+			}
+		}
+	}
+	if len(projectiles) <= 1 {
+		return defaultProjectiles
+	}
+	return projectiles
 }
 
 func (p *Parser) parseUnits() ([]domain.Unit, error) {
@@ -298,7 +353,7 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 			if depth == 3 && pendingLevelName != "" {
 				currentLevel = domain.BuildingLevel{
 					Name:             pendingLevelName,
-					RequiredFactions: pendingLevelFactions,
+					RequiredCultures: pendingLevelFactions,
 				}
 				pendingLevelName = ""
 				pendingLevelFactions = nil
@@ -406,18 +461,15 @@ func parseRecruitLine(line string) (domain.RecruitSlot, bool) {
 	}
 
 	return domain.RecruitSlot{
-		UnitType:   unitType,
-		Level:      level,
-		Cultures:   factions,
-		Conditions: conditions,
+		UnitType:     unitType,
+		Level:        level,
+		Requirements: factions,
+		Conditions:   conditions,
 	}, true
 }
 
-func (p *Parser) parseFactions() ([]string, error) {
-	path, err := p.findFile("world/maps/*/*/descr_strat.txt")
-	if err != nil {
-		return nil, err
-	}
+func (p *Parser) parseFactions() ([]domain.Faction, error) {
+	path := filepath.Join(p.GamePath, "descr_sm_factions.txt")
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -425,35 +477,67 @@ func (p *Parser) parseFactions() ([]string, error) {
 	}
 	defer file.Close()
 
-	var factions []string
-	var isFaction bool
+	var factions []domain.Faction
+	var current domain.Faction
+	var inBlock bool
 
 	scanner := bufio.NewScanner(file)
-
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
 
-		if line == "start_date" {
-			break
-		}
-
-		if line == "" || strings.HasPrefix(line, ";") {
+		if trimmed == "" || strings.HasPrefix(trimmed, ";") {
+			if inBlock && current.Name != "" {
+				factions = append(factions, current)
+				current = domain.Faction{}
+				inBlock = false
+			}
 			continue
 		}
 
-		switch line {
-		case "playable", "nonplayable", "unlockable":
-			isFaction = true
-		case "end":
-			isFaction = false
-		default:
-			if isFaction {
-				factions = append(factions, line)
+		fields := strings.Fields(trimmed)
+		if len(fields) < 2 {
+			continue
+		}
+
+		switch fields[0] {
+		case "faction":
+			if inBlock && current.Name != "" {
+				factions = append(factions, current)
+				current = domain.Faction{}
 			}
+			current.Name = fields[1]
+			inBlock = true
+		case "culture":
+			current.Culture = fields[1]
+		case "primary_colour":
+			current.PrimaryColour = parseColour(fields[1:])
+		case "secondary_colour":
+			current.SecondaryColour = parseColour(fields[1:])
 		}
 	}
 
+	if inBlock && current.Name != "" {
+		factions = append(factions, current)
+	}
+
 	return factions, scanner.Err()
+}
+
+func parseColour(fields []string) domain.Colour {
+	var c domain.Colour
+	for i := 0; i+1 < len(fields); i += 2 {
+		val, _ := strconv.Atoi(fields[i+1])
+		switch fields[i] {
+		case "red":
+			c.R = uint8(val)
+		case "green":
+			c.G = uint8(val)
+		case "blue":
+			c.B = uint8(val)
+		}
+	}
+	return c
 }
 
 func (p *Parser) parseUnitTexts() (map[string]unitText, error) {

@@ -1,8 +1,8 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { GetUnitByType, UpdateUnit, Save } from '../../wailsjs/go/main/App'
+import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings } from '../../wailsjs/go/main/App'
 
-const props = defineProps(['unitType'])
+const props = defineProps(['unitType', 'faction'])
 const emit = defineEmits(['saved', 'reverted'])
 
 const unit = ref(null)
@@ -11,10 +11,16 @@ const originalType = ref(null)
 const dirty = ref(false)
 const saving = ref(false)
 const error = ref(null)
+const iconData = ref('')
+const unitBuildings = ref([])
 
 watch(() => props.unitType, async (type) => {
-  if (!type) { unit.value = null; return }
-  unit.value = await GetUnitByType(type)
+  if (!type) { unit.value = null; iconData.value = ''; unitBuildings.value = []; return }
+  ;[unit.value, iconData.value, unitBuildings.value] = await Promise.all([
+    GetUnitByType(type),
+    props.faction ? GetUnitIcon(type, props.faction) : Promise.resolve(''),
+    GetUnitBuildings(type),
+  ])
   edited.value = JSON.parse(JSON.stringify(unit.value))
   originalType.value = type
   dirty.value = false
@@ -71,8 +77,18 @@ function cancel() {
 
       <!-- Описание (из export_units) -->
       <div class="desc-card">
-        <div class="desc-name">{{ edited.Name || edited.Type }}</div>
-        <div v-if="edited.DescrShort" class="desc-short">{{ edited.DescrShort.replace(/\\n/g, '\n') }}</div>
+        <div class="desc-header">
+          <div class="unit-icon-wrap">
+            <img v-if="iconData" :src="iconData" class="unit-icon" />
+            <div v-else class="unit-icon-placeholder">
+              <span>{{ (edited.Name || edited.Type).slice(0, 2).toUpperCase() }}</span>
+            </div>
+          </div>
+          <div class="desc-texts">
+            <div class="desc-name">{{ edited.Name || edited.Type }}</div>
+            <div v-if="edited.DescrShort" class="desc-short">{{ edited.DescrShort.replace(/\\n/g, '\n') }}</div>
+          </div>
+        </div>
         <div v-if="edited.Descr" class="desc-full">{{ edited.Descr.replace(/\\n/g, '\n') }}</div>
       </div>
 
@@ -219,8 +235,14 @@ function cancel() {
 
     <!-- Колонка зданий -->
     <div class="buildings-col">
-      <h3>Здания</h3>
-      <div class="buildings-placeholder">— в разработке —</div>
+      <h3>Здания для найма</h3>
+      <div v-if="unitBuildings.length === 0" class="buildings-empty">не производится</div>
+      <template v-else>
+        <div v-for="loc in unitBuildings" :key="loc.GroupName + loc.LevelName" class="building-entry">
+          <div class="building-icon-placeholder"></div>
+          <div class="building-level">{{ loc.LevelName }}</div>
+        </div>
+      </template>
     </div>
 
   </div>
@@ -254,6 +276,35 @@ function cancel() {
   border-radius: 6px;
   padding: 14px 16px;
 }
+.desc-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.unit-icon-wrap { flex-shrink: 0; }
+.unit-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: #0a1628;
+}
+.unit-icon-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 4px;
+  background: #0a1628;
+  border: 1px dashed #2a3a5e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #2a3a5e;
+  letter-spacing: 1px;
+}
+.desc-texts { flex: 1; min-width: 0; }
 .desc-name {
   font-size: 18px;
   font-weight: 600;
@@ -263,7 +314,6 @@ function cancel() {
   font-size: 13px;
   color: #aac;
   font-style: italic;
-  margin-bottom: 4px;
   white-space: pre-line;
 }
 .desc-full {
@@ -271,6 +321,7 @@ function cancel() {
   color: #889;
   line-height: 1.5;
   white-space: pre-line;
+  margin-top: 4px;
 }
 
 /* Toolbar */
@@ -367,11 +418,32 @@ function cancel() {
   margin-bottom: 12px;
   letter-spacing: 0.05em;
 }
-.buildings-placeholder {
+.buildings-empty {
   font-size: 12px;
   color: #444;
   text-align: center;
   margin-top: 40px;
+}
+.building-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #16213e;
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+}
+.building-icon-placeholder {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: #0a1628;
+  border: 1px dashed #2a3a5e;
+}
+.building-level {
+  font-size: 12px;
+  color: #e0e0e0;
 }
 
 .detail-empty {

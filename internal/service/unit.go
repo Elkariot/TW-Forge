@@ -14,10 +14,6 @@ func NewUnitService(repo repository.GameRepository) *UnitService {
 	return &UnitService{repo: repo}
 }
 
-func (s *UnitService) GetFactions() []domain.Faction {
-	return s.repo.GetFactions()
-}
-
 func (s *UnitService) GetByFaction(faction string) ([]domain.Unit, error) {
 	return s.repo.GetUnitsByFaction(faction)
 }

@@ -100,7 +100,7 @@ async function applyToGame() {
 
     <!-- Детали юнита -->
     <div class="detail-panel">
-      <UnitDetail :unit-type="selectedUnitType" @saved="onUnitSaved" @reverted="onUnitSaved" />
+      <UnitDetail :unit-type="selectedUnitType" :faction="selectedFaction" @saved="onUnitSaved" @reverted="onUnitSaved" />
     </div>
 
     </div> <!-- below-topbar -->
