@@ -2,6 +2,7 @@ package domain
 
 type Faction struct {
 	Name            string
+	DisplayName     string
 	Culture         string
 	PrimaryColour   Colour
 	SecondaryColour Colour

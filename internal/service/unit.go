@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"modding-utils/internal/domain"
 	"modding-utils/internal/repository"
+	"strings"
 )
 
 type UnitService struct {
@@ -51,6 +52,10 @@ func (s *UnitService) Update(originalType string, unit domain.Unit) error {
 }
 
 func (s *UnitService) Create(unit domain.Unit) error {
+	if _, exists := s.repo.GetUnitByType(unit.Type); exists {
+		return fmt.Errorf("unit type already in use: %s", unit.Type)
+	}
+
 	if err := s.repo.AddUnit(unit); err != nil {
 		return err
 	}
@@ -64,8 +69,30 @@ func (s *UnitService) Delete(unitType string) error {
 	return s.repo.SaveDraft()
 }
 
-func (s *UnitService) CopyUnit(unitType, faction string) error {
-	panic("not implemented")
+func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
+	unit, ok := s.repo.GetUnitByType(unitType)
+	if !ok {
+		return "", fmt.Errorf("unit not found")
+	}
+
+	base := fmt.Sprintf("%s copy", unit.Type)
+	newUnitType := base
+	for i := 2; ; i++ {
+		if _, exists := s.repo.GetUnitByType(newUnitType); !exists {
+			break
+		}
+		newUnitType = fmt.Sprintf("%s %d", base, i)
+	}
+
+	unit.Type = newUnitType
+	unit.Dictionary = strings.ReplaceAll(newUnitType, " ", "_")
+	unit.Ownership = []string{faction}
+
+	if err := s.repo.AddUnit(unit); err != nil {
+		return "", fmt.Errorf("error copying unit: %w", err)
+	}
+
+	return newUnitType, s.repo.SaveDraft()
 }
 
 func (s *UnitService) Revert(unitType string) error {
@@ -74,6 +101,23 @@ func (s *UnitService) Revert(unitType string) error {
 
 func (s *UnitService) RevertAll() {
 	s.repo.RevertAll()
+}
+
+func (s *UnitService) GetUnitChangeType(unitType string) string {
+	ct, ok := s.repo.GetChanges()[unitType]
+	if !ok {
+		return "none"
+	}
+	switch ct {
+	case repository.ChangeModified:
+		return "modified"
+	case repository.ChangeAdded:
+		return "added"
+	case repository.ChangeDeleted:
+		return "deleted"
+	default:
+		return "none"
+	}
 }
 
 func (s *UnitService) HasUnsavedChanges() bool {

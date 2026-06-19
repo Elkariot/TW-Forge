@@ -10,6 +10,17 @@ func (r *InMemoryRepository) GetAllUnits() []domain.Unit {
 	return r.working.Units
 }
 
+func (r *InMemoryRepository) GetAllUnitsTypes() []string {
+	units := r.GetAllUnits()
+	unitsTypes := make([]string, len(units))
+
+	for _, unit := range units {
+		unitsTypes = append(unitsTypes, unit.Type)
+	}
+
+	return unitsTypes
+}
+
 func (r *InMemoryRepository) GetUnitsByFaction(faction string) ([]domain.Unit, error) {
 	if _, ok := r.GetFactionByName(faction); !ok {
 		return nil, fmt.Errorf("faction not found")

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes } from '../../wailsjs/go/main/App'
+import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes, GetUnitChangeType, RevertUnit } from '../../wailsjs/go/main/App'
 import {
   UNIT_CATEGORIES, UNIT_CLASSES, VOICE_TYPES,
   WEAPON_TYPES, TECH_TYPES, DAMAGE_TYPES, SOUND_TYPES, ARMOUR_SOUNDS,
@@ -9,7 +9,7 @@ import {
 } from '../enums.js'
 
 const props = defineProps(['unitType', 'faction'])
-const emit = defineEmits(['saved', 'reverted'])
+const emit = defineEmits(['saved', 'reverted', 'deleted'])
 
 const unit = ref(null)
 const edited = ref(null)
@@ -19,6 +19,7 @@ const saving = ref(false)
 const error = ref(null)
 const iconData = ref('')
 const unitBuildings = ref([])
+const unitChangeType = ref('none')
 const projectileTypes = ref(['no'])
 
 onMounted(async () => {
@@ -26,18 +27,30 @@ onMounted(async () => {
 })
 
 watch(() => props.unitType, async (type) => {
-  if (!type) { unit.value = null; iconData.value = ''; unitBuildings.value = []; return }
+  if (!type) { unit.value = null; edited.value = null; iconData.value = ''; unitBuildings.value = []; unitChangeType.value = 'none'; return }
   error.value = null
   try {
-    ;[unit.value, iconData.value, unitBuildings.value] = await Promise.all([
+    const [fetchedUnit, fetchedBuildings, fetchedChangeType] = await Promise.all([
       GetUnitByType(type),
-      props.faction ? GetUnitIcon(type, props.faction) : Promise.resolve(''),
       GetUnitBuildings(type),
+      GetUnitChangeType(type),
     ])
+    if (props.unitType !== type) return
+    unit.value = fetchedUnit
+    unitBuildings.value = fetchedBuildings
+    unitChangeType.value = fetchedChangeType
     edited.value = JSON.parse(JSON.stringify(unit.value))
     originalType.value = type
     dirty.value = false
+    if (props.faction) {
+      GetUnitIcon(type, props.faction).then(icon => {
+        if (props.unitType === type) iconData.value = icon
+      }).catch(() => { iconData.value = '' })
+    } else {
+      iconData.value = ''
+    }
   } catch (e) {
+    if (props.unitType !== type) return
     error.value = `Ошибка загрузки юнита "${type}": ${e}`
     unit.value = null
     edited.value = null
@@ -118,6 +131,15 @@ function cancel() {
   error.value = null
   emit('reverted')
 }
+
+async function deleteUnit() {
+  try {
+    await RevertUnit(originalType.value)
+    emit('deleted')
+  } catch (e) {
+    error.value = String(e)
+  }
+}
 </script>
 
 <template>
@@ -125,6 +147,9 @@ function cancel() {
 
     <!-- Основная область со статами -->
     <div class="detail-main">
+
+      <!-- Шапка (не прокручивается) -->
+      <div class="detail-header">
 
       <!-- Описание (из export_units) -->
       <div class="desc-card">
@@ -137,6 +162,7 @@ function cancel() {
           </div>
           <div class="desc-texts">
             <div class="desc-name">{{ edited.Name || edited.Type }}</div>
+            <div class="desc-type">{{ edited.Type }}</div>
             <div v-if="edited.DescrShort" class="desc-short">{{ edited.DescrShort.replace(/\\n/g, '\n') }}</div>
           </div>
         </div>
@@ -151,9 +177,14 @@ function cancel() {
           </button>
           <button class="btn-cancel" @click="cancel">Отмена</button>
         </template>
+        <button v-if="unitChangeType === 'added'" class="btn-delete" @click="deleteUnit">Удалить копию</button>
         <span v-if="error" class="error">{{ error }}</span>
       </div>
 
+      </div> <!-- detail-header -->
+
+      <!-- Прокручиваемое содержимое -->
+      <div class="detail-scroll">
       <div class="sections">
 
         <!-- Основное -->
@@ -434,6 +465,7 @@ function cancel() {
         </section>
 
       </div>
+      </div> <!-- detail-scroll -->
     </div>
 
     <!-- Колонка зданий -->
@@ -466,8 +498,26 @@ function cancel() {
 
 .detail-main {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-header {
+  flex-shrink: 0;
+  padding: 20px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #1e2e50;
+  padding-bottom: 10px;
+}
+
+.detail-scroll {
+  flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 12px 20px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -512,6 +562,12 @@ function cancel() {
 .desc-name {
   font-size: 18px;
   font-weight: 600;
+  margin-bottom: 2px;
+}
+.desc-type {
+  font-size: 11px;
+  color: #555;
+  font-family: monospace;
   margin-bottom: 6px;
 }
 .desc-short {
@@ -555,6 +611,16 @@ function cancel() {
   font-size: 13px;
 }
 .btn-cancel:hover { border-color: #888; }
+.btn-delete {
+  background: transparent;
+  color: #e94560;
+  border: 1px solid #e94560;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-delete:hover { background: rgba(233,69,96,0.12); }
 .error { color: #e94560; font-size: 12px; }
 
 /* Секции */

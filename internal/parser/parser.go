@@ -38,6 +38,13 @@ func (p *Parser) ParseTextFiles() (*domain.GameData, error) {
 		return nil, fmt.Errorf("parse factions error: %w", err)
 	}
 
+	factionNames := p.parseFactionDisplayNames()
+	for i, f := range factions {
+		if name, ok := factionNames[strings.ToUpper(f.Name)]; ok {
+			factions[i].DisplayName = name
+		}
+	}
+
 	units, err := p.parseUnits()
 	if err != nil {
 		return nil, fmt.Errorf("parse units error: %w", err)
@@ -617,6 +624,51 @@ func setUnitTextValue(m map[string]unitText, key, field, value string) {
 		entry.DescrShort = value
 	}
 	m[key] = entry
+}
+
+// parseFactionDisplayNames reads all UTF-16 text files in data/text/ and collects
+// {KEY}\tValue entries, returning a map of uppercase key → display name.
+// This covers faction names stored in files like expanded_bi.txt.
+func (p *Parser) parseFactionDisplayNames() map[string]string {
+	result := make(map[string]string)
+	textDir := filepath.Join(p.GamePath, "text")
+	entries, err := os.ReadDir(textDir)
+	if err != nil {
+		return result
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".txt") {
+			continue
+		}
+		p.parseTextFileIntoMap(filepath.Join(textDir, entry.Name()), result)
+	}
+	return result
+}
+
+func (p *Parser) parseTextFileIntoMap(path string, out map[string]string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	decoder := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewDecoder()
+	scanner := bufio.NewScanner(transform.NewReader(f, decoder))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		end := strings.Index(line, "}")
+		if end == -1 {
+			continue
+		}
+		key := line[1:end]
+		value := strings.TrimSpace(line[end+1:])
+		if value != "" && !strings.HasPrefix(value, "¬") {
+			out[key] = value
+		}
+	}
 }
 
 func (p *Parser) findFile(pattern string) (string, error) {

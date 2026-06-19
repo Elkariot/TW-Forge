@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { GetFactions, GetUnitsByFaction, Save, HasUnsavedChanges } from '../wailsjs/go/main/App'
+import { GetFactions, GetUnitsByFaction, Save, HasUnsavedChanges, CopyUnit } from '../wailsjs/go/main/App'
 import UnitDetail from './components/UnitDetail.vue'
 import SetupScreen from './components/SetupScreen.vue'
 
@@ -33,6 +33,23 @@ function selectUnit(unit) {
 
 async function onUnitSaved() {
   hasChanges.value = await HasUnsavedChanges()
+}
+
+async function onUnitDeleted() {
+  unitGroups.value = await GetUnitsByFaction(selectedFaction.value)
+  selectedUnitType.value = null
+  hasChanges.value = await HasUnsavedChanges()
+}
+
+async function copyUnit(unit) {
+  try {
+    const newType = await CopyUnit(unit.Type, selectedFaction.value)
+    unitGroups.value = await GetUnitsByFaction(selectedFaction.value)
+    selectedUnitType.value = newType
+    hasChanges.value = await HasUnsavedChanges()
+  } catch (e) {
+    applyError.value = `Ошибка копирования: ${e}`
+  }
 }
 
 async function applyToGame() {
@@ -77,7 +94,7 @@ async function applyToGame() {
           :class="{ active: selectedFaction === faction.Name }"
           @click="selectFaction(faction)"
         >
-          {{ faction.Name }}
+          {{ faction.DisplayName || faction.Name }}
         </li>
       </ul>
     </aside>
@@ -96,7 +113,8 @@ async function applyToGame() {
               :class="{ active: selectedUnitType === unit.Type }"
               @click="selectUnit(unit)"
             >
-              {{ unit.Name || unit.Type }}
+              <span class="unit-name">{{ unit.Name || unit.Type }}</span>
+              <button class="unit-copy-btn" @click.stop="copyUnit(unit)" title="Копировать юнит">⧉</button>
             </li>
           </ul>
         </div>
@@ -108,7 +126,7 @@ async function applyToGame() {
 
     <!-- Детали юнита -->
     <div class="detail-panel">
-      <UnitDetail :unit-type="selectedUnitType" :faction="selectedFaction" @saved="onUnitSaved" @reverted="onUnitSaved" />
+      <UnitDetail :unit-type="selectedUnitType" :faction="selectedFaction" @saved="onUnitSaved" @reverted="onUnitSaved" @deleted="onUnitDeleted" />
     </div>
 
     </div> <!-- below-topbar -->
@@ -197,6 +215,9 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
 .class-group h4 { font-size: 10px; color: #555; margin-bottom: 4px; text-transform: uppercase; }
 .class-group ul { list-style: none; }
 .class-group li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 5px 8px;
   border-radius: 3px;
   font-size: 12px;
@@ -205,6 +226,20 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
 }
 .class-group li:hover { background: #16213e; }
 .class-group li.active { background: #0f3460; color: #fff; }
+.unit-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unit-copy-btn {
+  visibility: hidden;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.class-group li:hover .unit-copy-btn { visibility: visible; }
+.unit-copy-btn:hover { color: #e94560; }
 
 /* Панель деталей */
 .detail-panel {

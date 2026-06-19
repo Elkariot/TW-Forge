@@ -16,7 +16,10 @@ func (r *InMemoryRepository) GetBuildingByName(name string) (domain.BuildingGrou
 }
 
 func (r *InMemoryRepository) GetUnitBuildings(unitType string) []domain.RecruitLocation {
-	return r.working.UnitRecruitIndex[unitType]
+	if locs := r.working.UnitRecruitIndex[unitType]; locs != nil {
+		return locs
+	}
+	return []domain.RecruitLocation{}
 }
 
 func (r *InMemoryRepository) GetCultureBuildings(culture string) []domain.BuildingGroup {

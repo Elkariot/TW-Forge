@@ -25,6 +25,7 @@ type GameRepository interface {
 
 	// Units
 	GetAllUnits() []domain.Unit
+	GetAllUnitsTypes() []string
 	GetUnitsByFaction(faction string) ([]domain.Unit, error)
 	GetUnitByType(unitType string) (domain.Unit, bool)
 

@@ -170,6 +170,14 @@ func (a *App) GetUnitBuildings(unitType string) []domain.RecruitLocation {
 	return a.buildingService.GetUnitBuilding(unitType)
 }
 
+func (a *App) CopyUnit(unitType, faction string) (string, error) {
+	return a.unitService.CopyUnit(unitType, faction)
+}
+
+func (a *App) GetUnitChangeType(unitType string) string {
+	return a.unitService.GetUnitChangeType(unitType)
+}
+
 func (a *App) RevertUnit(unitType string) error {
 	return a.unitService.Revert(unitType)
 }
