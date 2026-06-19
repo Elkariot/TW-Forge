@@ -1,12 +1,14 @@
 package domain
 
 type BuildingGroup struct {
-	Name   string
-	Levels []BuildingLevel
+	Name        string
+	DisplayName string
+	Levels      []BuildingLevel
 }
 
 type BuildingLevel struct {
 	Name             string
+	DisplayName      string
 	RequiredCultures []string
 	RecruitSlots     []RecruitSlot
 	Construction     int

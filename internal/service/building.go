@@ -47,3 +47,14 @@ func (s *BuildingService) GetFactionBuildings(faction string) ([]domain.Building
 	}
 	return s.repo.GetCultureBuildings(culture), nil
 }
+
+func (s *BuildingService) UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error {
+	if err := s.repo.UpdateBuildingLevel(groupName, levelName, slots); err != nil {
+		return err
+	}
+	return s.repo.SaveBuildingsDraft()
+}
+
+func (s *BuildingService) RevertBuildings() error {
+	return s.repo.RevertBuildings()
+}

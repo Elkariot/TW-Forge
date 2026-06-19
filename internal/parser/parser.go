@@ -38,9 +38,9 @@ func (p *Parser) ParseTextFiles() (*domain.GameData, error) {
 		return nil, fmt.Errorf("parse factions error: %w", err)
 	}
 
-	factionNames := p.parseFactionDisplayNames()
+	textNames := p.parseFactionDisplayNames()
 	for i, f := range factions {
-		if name, ok := factionNames[strings.ToUpper(f.Name)]; ok {
+		if name, ok := textNames[strings.ToUpper(f.Name)]; ok {
 			factions[i].DisplayName = name
 		}
 	}
@@ -53,6 +53,18 @@ func (p *Parser) ParseTextFiles() (*domain.GameData, error) {
 	buildings, err := p.parseBuildings()
 	if err != nil {
 		return nil, fmt.Errorf("parse buildings error: %w", err)
+	}
+
+	// Enrich building names from text files (keys are uppercase level/group names)
+	for i := range buildings {
+		if name, ok := textNames[strings.ToUpper(buildings[i].Name)]; ok {
+			buildings[i].DisplayName = name
+		}
+		for j := range buildings[i].Levels {
+			if name, ok := textNames[strings.ToUpper(buildings[i].Levels[j].Name)]; ok {
+				buildings[i].Levels[j].DisplayName = name
+			}
+		}
 	}
 
 	return &domain.GameData{

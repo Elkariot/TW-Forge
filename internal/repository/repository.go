@@ -34,6 +34,9 @@ type GameRepository interface {
 	GetBuildingByName(name string) (domain.BuildingGroup, bool)
 	GetUnitBuildings(unitType string) []domain.RecruitLocation
 	GetCultureBuildings(culture string) []domain.BuildingGroup
+	UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error
+	RevertBuildings() error
+	SaveBuildingsDraft() error
 
 	// Mutations
 	AddUnit(unit domain.Unit) error
@@ -53,14 +56,16 @@ type GameRepository interface {
 
 type Writer interface {
 	SaveDraft(data domain.GameData, changes map[string]ChangeType) error
+	SaveBuildingsDraft(data domain.GameData) error
 	Apply() error
 }
 
 type InMemoryRepository struct {
-	original domain.GameData
-	working  domain.GameData
-	writer   Writer
-	changes  map[string]ChangeType
+	original       domain.GameData
+	working        domain.GameData
+	writer         Writer
+	changes        map[string]ChangeType
+	buildingsDirty bool
 }
 
 func New(data domain.GameData, writer Writer) *InMemoryRepository {
@@ -75,10 +80,14 @@ func New(data domain.GameData, writer Writer) *InMemoryRepository {
 func (r *InMemoryRepository) RevertAll() {
 	r.working = r.original.DeepCopy()
 	r.changes = make(map[string]ChangeType)
+	r.buildingsDirty = false
+	if r.writer != nil {
+		_ = r.writer.SaveBuildingsDraft(r.working)
+	}
 }
 
 func (r *InMemoryRepository) HasUnsavedChanges() bool {
-	return len(r.changes) > 0
+	return len(r.changes) > 0 || r.buildingsDirty
 }
 
 func (r *InMemoryRepository) GetChanges() map[string]ChangeType {
@@ -92,9 +101,20 @@ func (r *InMemoryRepository) SaveDraft() error {
 	return r.writer.SaveDraft(r.working, r.changes)
 }
 
+func (r *InMemoryRepository) SaveBuildingsDraft() error {
+	if r.writer == nil {
+		return fmt.Errorf("writer not configured")
+	}
+	return r.writer.SaveBuildingsDraft(r.working)
+}
+
 func (r *InMemoryRepository) Save() error {
 	if r.writer == nil {
 		return fmt.Errorf("writer not configured")
 	}
-	return r.writer.Apply()
+	if err := r.writer.Apply(); err != nil {
+		return err
+	}
+	r.buildingsDirty = false
+	return nil
 }

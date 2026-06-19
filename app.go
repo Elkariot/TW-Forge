@@ -138,6 +138,22 @@ func (a *App) GetFactions() []domain.Faction {
 	return a.factionService.GetFactions()
 }
 
+func (a *App) GetAllUnits() []domain.Unit {
+	return a.unitService.GetAllUnits()
+}
+
+func (a *App) GetBuildings() []domain.BuildingGroup {
+	return a.buildingService.GetBuildings()
+}
+
+func (a *App) UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error {
+	return a.buildingService.UpdateBuildingLevel(groupName, levelName, slots)
+}
+
+func (a *App) RevertBuildings() error {
+	return a.buildingService.RevertBuildings()
+}
+
 func (a *App) GetUnitsByFaction(faction string) (map[string]map[string][]domain.Unit, error) {
 	return a.unitService.GetFactionUnitsByCategoryAndClass(faction)
 }

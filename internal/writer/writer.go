@@ -51,7 +51,16 @@ func (w *GameWriter) Apply() error {
 	if err := w.applyFile("export_descr_unit.txt"); err != nil {
 		return err
 	}
-	return w.applyFile(filepath.Join("text", "export_units.txt"))
+	if err := w.applyFile(filepath.Join("text", "export_units.txt")); err != nil {
+		return err
+	}
+	draftBuildings := filepath.Join(w.draftPath, "export_descr_buildings.txt")
+	if _, err := os.Stat(draftBuildings); err == nil {
+		if err := w.applyFile("export_descr_buildings.txt"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *GameWriter) ensureInit() error {
