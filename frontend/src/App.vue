@@ -2,6 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { GetFactions, GetUnitsByFaction, Save, HasUnsavedChanges } from '../wailsjs/go/main/App'
 import UnitDetail from './components/UnitDetail.vue'
+import SetupScreen from './components/SetupScreen.vue'
+
+const screen = ref('setup') // 'setup' | 'editor'
+
+async function onGameReady() {
+  screen.value = 'editor'
+  factions.value = await GetFactions()
+}
 
 const factions = ref([])
 const selectedFaction = ref(null)
@@ -11,9 +19,7 @@ const hasChanges = ref(false)
 const applying = ref(false)
 const applyError = ref(null)
 
-onMounted(async () => {
-  factions.value = await GetFactions()
-})
+onMounted(() => {})
 
 async function selectFaction(faction) {
   selectedFaction.value = faction.Name
@@ -44,7 +50,9 @@ async function applyToGame() {
 </script>
 
 <template>
-  <div class="layout">
+  <SetupScreen v-if="screen === 'setup'" @ready="onGameReady" />
+
+  <div v-else class="layout">
 
     <!-- Топбар -->
     <div class="topbar">
@@ -106,6 +114,7 @@ async function applyToGame() {
     </div> <!-- below-topbar -->
   </div>
 </template>
+
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }

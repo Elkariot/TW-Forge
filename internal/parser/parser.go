@@ -187,6 +187,12 @@ func (p *Parser) parseUnits() ([]domain.Unit, error) {
 				unit.Class = fields[1]
 			case "voice_type":
 				unit.VoiceType = fields[1]
+			case "officer":
+				unit.Officers = append(unit.Officers, strings.Join(fields[1:], " "))
+			case "mount":
+				unit.Mount = strings.Join(fields[1:], " ")
+			case "mount_effect":
+				unit.MountEffect = strings.Join(fields[1:], " ")
 			case "soldier":
 				vals := splitByComma(fields)
 				unit.Soldier.Model = vals[0]

@@ -1,6 +1,12 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
-import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings } from '../../wailsjs/go/main/App'
+import { ref, watch, onMounted } from 'vue'
+import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes } from '../../wailsjs/go/main/App'
+import {
+  UNIT_CATEGORIES, UNIT_CLASSES, VOICE_TYPES,
+  WEAPON_TYPES, TECH_TYPES, DAMAGE_TYPES, SOUND_TYPES, ARMOUR_SOUNDS,
+  DISCIPLINE_VALUES, TRAINING_VALUES, UNIT_ATTRIBUTES, WEAPON_ATTRIBUTES,
+  FORMATION_PRIMARY, FORMATION_SECONDARY,
+} from '../enums.js'
 
 const props = defineProps(['unitType', 'faction'])
 const emit = defineEmits(['saved', 'reverted'])
@@ -13,36 +19,81 @@ const saving = ref(false)
 const error = ref(null)
 const iconData = ref('')
 const unitBuildings = ref([])
+const projectileTypes = ref(['no'])
+
+onMounted(async () => {
+  projectileTypes.value = await GetProjectileTypes()
+})
 
 watch(() => props.unitType, async (type) => {
   if (!type) { unit.value = null; iconData.value = ''; unitBuildings.value = []; return }
-  ;[unit.value, iconData.value, unitBuildings.value] = await Promise.all([
-    GetUnitByType(type),
-    props.faction ? GetUnitIcon(type, props.faction) : Promise.resolve(''),
-    GetUnitBuildings(type),
-  ])
-  edited.value = JSON.parse(JSON.stringify(unit.value))
-  originalType.value = type
-  dirty.value = false
   error.value = null
+  try {
+    ;[unit.value, iconData.value, unitBuildings.value] = await Promise.all([
+      GetUnitByType(type),
+      props.faction ? GetUnitIcon(type, props.faction) : Promise.resolve(''),
+      GetUnitBuildings(type),
+    ])
+    edited.value = JSON.parse(JSON.stringify(unit.value))
+    originalType.value = type
+    dirty.value = false
+  } catch (e) {
+    error.value = `Ошибка загрузки юнита "${type}": ${e}`
+    unit.value = null
+    edited.value = null
+  }
 })
 
 function markDirty() { dirty.value = true }
 
-const priAttrStr = computed({
-  get: () => edited.value?.StatPriAttr?.join(', ') ?? '',
-  set: (v) => { edited.value.StatPriAttr = v.split(',').map(s => s.trim()).filter(Boolean); markDirty() }
-})
+function onWeaponAttrChange(field, key, checked) {
+  const current = (edited.value[field] ?? []).filter(a => a !== 'no')
+  const updated = checked ? [...current, key] : current.filter(a => a !== key)
+  edited.value[field] = updated.length ? updated : ['no']
+  markDirty()
+}
 
-const secAttrStr = computed({
-  get: () => edited.value?.StatSecAttr?.join(', ') ?? '',
-  set: (v) => { edited.value.StatSecAttr = v.split(',').map(s => s.trim()).filter(Boolean); markDirty() }
-})
+// Formation helpers — работают с "N, N, N, N, N, primary[, secondary]"
+function fParts() {
+  return (edited.value?.Formation ?? '').split(',').map(s => s.trim())
+}
+function getFormationNum(idx) {
+  return parseFloat(fParts()[idx]) || 0
+}
+function setFormationNum(idx, val) {
+  const p = fParts()
+  while (p.length < 7) p.push('')
+  p[idx] = String(val)
+  edited.value.Formation = p.filter((v, i) => i < 5 || v !== '').join(', ')
+  markDirty()
+}
+function getFormationPrimary() { return fParts()[5] || 'square' }
+function getFormationSecondary() { return fParts()[6] || '' }
+function setFormationPrimary(val) {
+  const p = fParts()
+  while (p.length < 6) p.push('')
+  p[5] = val
+  edited.value.Formation = p.filter((v, i) => i < 5 || v !== '').join(', ')
+  markDirty()
+}
+function setFormationSecondary(val) {
+  const p = fParts()
+  while (p.length < 6) p.push('square')
+  if (val) { p[6] = val } else { p.splice(6, 1) }
+  edited.value.Formation = p.filter((v, i) => i < 5 || v !== '').join(', ')
+  markDirty()
+}
 
-const attributesStr = computed({
-  get: () => edited.value?.Attributes?.join(', ') ?? '',
-  set: (v) => { edited.value.Attributes = v.split(',').map(s => s.trim()).filter(Boolean); markDirty() }
-})
+function getSpearBonus(field) {
+  const item = (edited.value?.[field] ?? []).find(a => /^spear_bonus_\d+$/.test(a))
+  return item ? parseInt(item.slice(12)) : 0
+}
+
+function setSpearBonus(field, n) {
+  const current = (edited.value[field] ?? []).filter(a => !/^spear_bonus_\d+$/.test(a))
+  edited.value[field] = n > 0 ? [...current, `spear_bonus_${n}`] : current
+  markDirty()
+}
 
 async function save() {
   saving.value = true
@@ -110,11 +161,65 @@ function cancel() {
           <h3>Основное</h3>
           <div class="grid">
             <label>Тип<input v-model="edited.Type" @input="markDirty" /></label>
-            <label>Категория<input v-model="edited.Category" @input="markDirty" /></label>
-            <label>Класс<input v-model="edited.Class" @input="markDirty" /></label>
-            <label>Голос<input v-model="edited.VoiceType" @input="markDirty" /></label>
-            <label class="full">Атрибуты<input v-model="attributesStr" @input="markDirty" /></label>
-            <label v-if="edited.Mount !== undefined" class="full">Маунт<input v-model="edited.Mount" @input="markDirty" /></label>
+            <label>Категория
+              <select v-model="edited.Category" @change="markDirty">
+                <option v-for="v in UNIT_CATEGORIES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Класс
+              <select v-model="edited.Class" @change="markDirty">
+                <option v-for="v in UNIT_CLASSES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Голос
+              <select v-model="edited.VoiceType" @change="markDirty">
+                <option v-for="v in VOICE_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label v-if="edited.Mount || edited.Category === 'cavalry'" class="full">Маунт<input v-model="edited.Mount" @input="markDirty" /></label>
+            <label v-if="edited.Mount || edited.MountEffect || edited.Category === 'cavalry'" class="full">Эффект маунта<input v-model="edited.MountEffect" @input="markDirty" /></label>
+            <div class="full formation-group">
+              <div class="attr-label">Строй</div>
+              <div class="formation-pairs">
+                <div class="formation-pair">
+                  <div class="formation-pair-title">Тесный</div>
+                  <div class="formation-pair-inputs">
+                    <label>Шир.<input type="number" step="0.1" :value="getFormationNum(0)" @change="e => setFormationNum(0, e.target.value)" /></label>
+                    <label>Гл.<input type="number" step="0.1" :value="getFormationNum(1)" @change="e => setFormationNum(1, e.target.value)" /></label>
+                  </div>
+                </div>
+                <div class="formation-pair">
+                  <div class="formation-pair-title">Свободный</div>
+                  <div class="formation-pair-inputs">
+                    <label>Шир.<input type="number" step="0.1" :value="getFormationNum(2)" @change="e => setFormationNum(2, e.target.value)" /></label>
+                    <label>Гл.<input type="number" step="0.1" :value="getFormationNum(3)" @change="e => setFormationNum(3, e.target.value)" /></label>
+                  </div>
+                </div>
+                <label class="formation-single">Макс. гл.<input type="number" step="1" :value="getFormationNum(4)" @change="e => setFormationNum(4, e.target.value)" /></label>
+                <label class="formation-select">Тип строя
+                  <select :value="getFormationPrimary()" @change="e => setFormationPrimary(e.target.value)">
+                    <option v-for="v in FORMATION_PRIMARY" :key="v" :value="v">{{ v }}</option>
+                  </select>
+                </label>
+                <label class="formation-select">Доп. строй
+                  <select :value="getFormationSecondary()" @change="e => setFormationSecondary(e.target.value)">
+                    <option v-for="v in FORMATION_SECONDARY" :key="v" :value="v">{{ v || '—' }}</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="full attr-group">
+              <div class="attr-label">Атрибуты</div>
+              <input type="text" readonly class="attr-display"
+                :value="(edited.Attributes ?? []).join(', ') || '—'"
+                placeholder="нет" />
+              <div class="attr-list">
+                <label v-for="attr in UNIT_ATTRIBUTES" :key="attr.key" class="attr-check">
+                  <input type="checkbox" :value="attr.key" v-model="edited.Attributes" @change="markDirty" />
+                  {{ attr.label }}
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -144,16 +249,57 @@ function cancel() {
           <div class="grid">
             <label>Атака<input type="number" v-model.number="edited.StatPri.Attack" @input="markDirty" /></label>
             <label>Заряд<input type="number" v-model.number="edited.StatPri.ChargeBonus" @input="markDirty" /></label>
-            <label>Снаряд<input v-model="edited.StatPri.Missile" @input="markDirty" /></label>
+            <label>Снаряд
+              <select v-model="edited.StatPri.Missile" @change="markDirty">
+                <option v-for="v in projectileTypes" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
             <label>Дальность<input type="number" v-model.number="edited.StatPri.Range" @input="markDirty" /></label>
             <label>Боезапас<input type="number" v-model.number="edited.StatPri.Ammo" @input="markDirty" /></label>
-            <label>Тип оружия<input v-model="edited.StatPri.WeaponType" @input="markDirty" /></label>
-            <label>Тех. тип<input v-model="edited.StatPri.TechType" @input="markDirty" /></label>
-            <label>Тип урона<input v-model="edited.StatPri.DamageType" @input="markDirty" /></label>
-            <label>Звук<input v-model="edited.StatPri.SoundType" @input="markDirty" /></label>
+            <label>Тип оружия
+              <select v-model="edited.StatPri.WeaponType" @change="markDirty">
+                <option v-for="v in WEAPON_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Тех. тип
+              <select v-model="edited.StatPri.TechType" @change="markDirty">
+                <option v-for="v in TECH_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Тип урона
+              <select v-model="edited.StatPri.DamageType" @change="markDirty">
+                <option v-for="v in DAMAGE_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Звук
+              <select v-model="edited.StatPri.SoundType" @change="markDirty">
+                <option v-for="v in SOUND_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
             <label>Задержка<input type="number" step="0.1" v-model.number="edited.StatPri.MinDelay" @input="markDirty" /></label>
             <label>Фактор<input type="number" step="0.1" v-model.number="edited.StatPri.Factor" @input="markDirty" /></label>
-            <label class="full">Атрибуты<input v-model="priAttrStr" /></label>
+            <div class="full attr-group">
+              <div class="attr-label">Атрибуты оружия</div>
+              <input type="text" readonly class="attr-display"
+                :value="(edited.StatPriAttr ?? []).filter(a => a !== 'no').join(', ') || '—'"
+                placeholder="нет" />
+              <div class="attr-list">
+                <label v-for="attr in WEAPON_ATTRIBUTES" :key="attr.key" class="attr-check">
+                  <input type="checkbox"
+                    :checked="!!(edited.StatPriAttr?.includes(attr.key))"
+                    @change="e => onWeaponAttrChange('StatPriAttr', attr.key, e.target.checked)"
+                  />
+                  {{ attr.label }}
+                </label>
+                <label class="attr-check spear-bonus-row" title="+N к атаке против кавалерии. Типовые значения: 4 — ополч. копьё, 8 — гоплиты/копейщики, 12 — тяжёлые пикинёры">
+                  <span>Бонус vs конницы <span class="attr-key">(spear_bonus)</span></span>
+                  <input type="number" min="0" max="20" step="1" class="spear-bonus-input"
+                    :value="getSpearBonus('StatPriAttr')"
+                    @change="e => setSpearBonus('StatPriAttr', Number(e.target.value))"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -163,16 +309,57 @@ function cancel() {
           <div class="grid">
             <label>Атака<input type="number" v-model.number="edited.StatSec.Attack" @input="markDirty" /></label>
             <label>Заряд<input type="number" v-model.number="edited.StatSec.ChargeBonus" @input="markDirty" /></label>
-            <label>Снаряд<input v-model="edited.StatSec.Missile" @input="markDirty" /></label>
+            <label>Снаряд
+              <select v-model="edited.StatSec.Missile" @change="markDirty">
+                <option v-for="v in projectileTypes" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
             <label>Дальность<input type="number" v-model.number="edited.StatSec.Range" @input="markDirty" /></label>
             <label>Боезапас<input type="number" v-model.number="edited.StatSec.Ammo" @input="markDirty" /></label>
-            <label>Тип оружия<input v-model="edited.StatSec.WeaponType" @input="markDirty" /></label>
-            <label>Тех. тип<input v-model="edited.StatSec.TechType" @input="markDirty" /></label>
-            <label>Тип урона<input v-model="edited.StatSec.DamageType" @input="markDirty" /></label>
-            <label>Звук<input v-model="edited.StatSec.SoundType" @input="markDirty" /></label>
+            <label>Тип оружия
+              <select v-model="edited.StatSec.WeaponType" @change="markDirty">
+                <option v-for="v in WEAPON_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Тех. тип
+              <select v-model="edited.StatSec.TechType" @change="markDirty">
+                <option v-for="v in TECH_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Тип урона
+              <select v-model="edited.StatSec.DamageType" @change="markDirty">
+                <option v-for="v in DAMAGE_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Звук
+              <select v-model="edited.StatSec.SoundType" @change="markDirty">
+                <option v-for="v in SOUND_TYPES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
             <label>Задержка<input type="number" step="0.1" v-model.number="edited.StatSec.MinDelay" @input="markDirty" /></label>
             <label>Фактор<input type="number" step="0.1" v-model.number="edited.StatSec.Factor" @input="markDirty" /></label>
-            <label class="full">Атрибуты<input v-model="secAttrStr" /></label>
+            <div class="full attr-group">
+              <div class="attr-label">Атрибуты оружия</div>
+              <input type="text" readonly class="attr-display"
+                :value="(edited.StatSecAttr ?? []).filter(a => a !== 'no').join(', ') || '—'"
+                placeholder="нет" />
+              <div class="attr-list">
+                <label v-for="attr in WEAPON_ATTRIBUTES" :key="attr.key" class="attr-check">
+                  <input type="checkbox"
+                    :checked="!!(edited.StatSecAttr?.includes(attr.key))"
+                    @change="e => onWeaponAttrChange('StatSecAttr', attr.key, e.target.checked)"
+                  />
+                  {{ attr.label }}
+                </label>
+                <label class="attr-check spear-bonus-row" title="+N к атаке против кавалерии. Типовые значения: 4 — ополч. копьё, 8 — гоплиты/копейщики, 12 — тяжёлые пикинёры">
+                  <span>Бонус vs конницы <span class="attr-key">(spear_bonus)</span></span>
+                  <input type="number" min="0" max="20" step="1" class="spear-bonus-input"
+                    :value="getSpearBonus('StatSecAttr')"
+                    @change="e => setSpearBonus('StatSecAttr', Number(e.target.value))"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -183,10 +370,18 @@ function cancel() {
             <label>Броня (осн.)<input type="number" v-model.number="edited.StatPriArmour.Armour" @input="markDirty" /></label>
             <label>Защита<input type="number" v-model.number="edited.StatPriArmour.DefSkill" @input="markDirty" /></label>
             <label>Щит<input type="number" v-model.number="edited.StatPriArmour.Shield" @input="markDirty" /></label>
-            <label>Звук брони<input v-model="edited.StatPriArmour.Sound" @input="markDirty" /></label>
+            <label>Звук брони
+              <select v-model="edited.StatPriArmour.Sound" @change="markDirty">
+                <option v-for="v in ARMOUR_SOUNDS" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
             <label>Броня (доп.)<input type="number" v-model.number="edited.StatSecArmour.Armour" @input="markDirty" /></label>
             <label>Защита (доп.)<input type="number" v-model.number="edited.StatSecArmour.DefSkill" @input="markDirty" /></label>
-            <label>Звук (доп.)<input v-model="edited.StatSecArmour.Sound" @input="markDirty" /></label>
+            <label>Звук (доп.)
+              <select v-model="edited.StatSecArmour.Sound" @change="markDirty">
+                <option v-for="v in ARMOUR_SOUNDS" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
           </div>
         </section>
 
@@ -195,13 +390,21 @@ function cancel() {
           <h3>Прочее</h3>
           <div class="grid">
             <label>Жара<input type="number" v-model.number="edited.StatHeat" @input="markDirty" /></label>
-            <label>Земля +пыль<input type="number" v-model.number="edited.StatGround[0]" @input="markDirty" /></label>
-            <label>Земля +грязь<input type="number" v-model.number="edited.StatGround[1]" @input="markDirty" /></label>
-            <label>Земля +снег<input type="number" v-model.number="edited.StatGround[2]" @input="markDirty" /></label>
-            <label>Земля +лес<input type="number" v-model.number="edited.StatGround[3]" @input="markDirty" /></label>
+            <label>Кустарник<input type="number" v-model.number="edited.StatGround[0]" @input="markDirty" /></label>
+            <label>Песок<input type="number" v-model.number="edited.StatGround[1]" @input="markDirty" /></label>
+            <label>Лес<input type="number" v-model.number="edited.StatGround[2]" @input="markDirty" /></label>
+            <label>Снег<input type="number" v-model.number="edited.StatGround[3]" @input="markDirty" /></label>
             <label>Мораль<input type="number" v-model.number="edited.StatMental.Morale" @input="markDirty" /></label>
-            <label>Дисциплина<input v-model="edited.StatMental.Discipline" @input="markDirty" /></label>
-            <label>Тренировка<input v-model="edited.StatMental.Training" @input="markDirty" /></label>
+            <label>Дисциплина
+              <select v-model="edited.StatMental.Discipline" @change="markDirty">
+                <option v-for="v in DISCIPLINE_VALUES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
+            <label>Тренировка
+              <select v-model="edited.StatMental.Training" @change="markDirty">
+                <option v-for="v in TRAINING_VALUES" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </label>
             <label>Дист. заряда<input type="number" v-model.number="edited.StatChargeDist" @input="markDirty" /></label>
             <label>Задержка огня<input type="number" v-model.number="edited.StatFireDelay" @input="markDirty" /></label>
             <label>Еда (осн.)<input type="number" v-model.number="edited.StatFood[0]" @input="markDirty" /></label>
@@ -248,7 +451,8 @@ function cancel() {
   </div>
 
   <div v-else class="detail-empty">
-    <span>Выберите юнита</span>
+    <span v-if="error" class="load-error">{{ error }}</span>
+    <span v-else>Выберите юнита</span>
   </div>
 </template>
 
@@ -381,8 +585,9 @@ function cancel() {
   font-size: 11px;
   color: #888;
 }
-.grid label.full { grid-column: 1 / -1; }
-.grid input {
+.grid .full { grid-column: 1 / -1; }
+.grid input,
+.grid select {
   background: #0f1b35;
   border: 1px solid #2a3a5e;
   border-radius: 3px;
@@ -391,7 +596,98 @@ function cancel() {
   padding: 4px 6px;
   width: 100%;
 }
-.grid input:focus { outline: none; border-color: #e94560; }
+.grid input:focus,
+.grid select:focus { outline: none; border-color: #e94560; }
+.grid select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; padding-right: 20px; }
+
+/* Атрибуты (чекбоксы) */
+.attr-group { display: flex; flex-direction: column; gap: 6px; }
+.attr-label { font-size: 11px; color: #888; }
+.attr-display {
+  background: #080f20;
+  border: 1px solid #1e2e50;
+  border-radius: 3px;
+  color: #666;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 4px 7px;
+  width: 100%;
+  cursor: default;
+  box-sizing: border-box;
+}
+.attr-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px 10px;
+}
+.attr-check {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 5px !important;
+  font-size: 11px;
+  color: #ccc;
+  cursor: pointer;
+}
+.attr-check input[type="checkbox"] {
+  flex-shrink: 0;
+  width: auto;
+  margin: 0;
+  accent-color: #e94560;
+  cursor: pointer;
+}
+.attr-key { color: #555; font-size: 10px; }
+.spear-bonus-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: help; }
+.spear-bonus-input { width: 52px !important; padding: 2px 4px !important; text-align: center; }
+
+/* Строй */
+.formation-group { display: flex; flex-direction: column; gap: 8px; }
+.formation-pairs { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.formation-pair {
+  border: 1px solid #2a3a5e;
+  border-radius: 5px;
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.formation-pair-title { font-size: 10px; color: #555; text-align: center; }
+.formation-pair-inputs { display: flex; gap: 6px; }
+.formation-pair-inputs label,
+.formation-single,
+.formation-select {
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.formation-pair-inputs label { width: 52px; }
+.formation-single { width: 68px; }
+.formation-pair-inputs input,
+.formation-single input {
+  background: #0f1b35;
+  border: 1px solid #2a3a5e;
+  border-radius: 3px;
+  color: #e0e0e0;
+  font-size: 12px;
+  padding: 4px 6px;
+  width: 100%;
+}
+.formation-select select {
+  background: #0f1b35;
+  border: 1px solid #2a3a5e;
+  border-radius: 3px;
+  color: #e0e0e0;
+  font-size: 12px;
+  padding: 4px 20px 4px 6px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  min-width: 90px;
+}
 
 /* Фракции */
 .ownership-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -453,5 +749,13 @@ function cancel() {
   height: 100%;
   color: #444;
   font-size: 14px;
+  padding: 20px;
+  text-align: center;
+}
+.load-error {
+  color: #e94560;
+  font-size: 13px;
+  max-width: 500px;
+  word-break: break-all;
 }
 </style>

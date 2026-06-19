@@ -13,13 +13,43 @@ export const DISCIPLINE_VALUES = ['disciplined', 'impetuous', 'berserker', 'low'
 export const TRAINING_VALUES = ['highly_trained', 'trained', 'untrained']
 
 export const UNIT_ATTRIBUTES = [
-  'hide_forest', 'hide_long_grass', 'hide_improved_forest', 'hide_anywhere',
-  'hardy', 'very_hardy',
-  'can_sap', 'sea_faring',
-  'frighten_foot', 'frighten_mounted',
-  'cantabrian_circle', 'warcry', 'screeching_women',
-  'command', 'druid',
-  'general_unit', 'general_unit_upgrade',
-  'mercenary_unit', 'no_custom',
-  'can_run_amok',
+  { key: 'hide_forest',          label: 'Скрытность в лесу' },
+  { key: 'hide_long_grass',      label: 'Скрытность в высокой траве' },
+  { key: 'hide_improved_forest', label: 'Улучш. скрытность в лесу' },
+  { key: 'hide_anywhere',        label: 'Скрытность везде' },
+  { key: 'hardy',                label: 'Выносливый' },
+  { key: 'very_hardy',           label: 'Очень выносливый' },
+  { key: 'can_sap',              label: 'Может рыть подкопы' },
+  { key: 'sea_faring',           label: 'Морской переход' },
+  { key: 'frighten_foot',        label: 'Устрашает пехоту' },
+  { key: 'frighten_mounted',     label: 'Устрашает конницу' },
+  { key: 'cantabrian_circle',    label: 'Кантабрийский круг' },
+  { key: 'warcry',               label: 'Боевой клич' },
+  { key: 'screeching_women',     label: 'Крики женщин' },
+  { key: 'command',              label: 'Командный' },
+  { key: 'druid',                label: 'Друид' },
+  { key: 'general_unit',         label: 'Генеральский отряд' },
+  { key: 'general_unit_upgrade', label: 'Улучш. генеральский' },
+  { key: 'mercenary_unit',       label: 'Наёмники' },
+  { key: 'no_custom',            label: 'Недоступен в конструкторе' },
+  { key: 'can_run_amok',         label: 'Впадает в панику' },
 ]
+
+// Атрибуты оружия (stat_pri_attr / stat_sec_attr), "no" означает отсутствие атрибутов
+// spear_bonus_N хранится отдельно (числовое поле)
+export const WEAPON_ATTRIBUTES = [
+  { key: 'spear',      label: 'Длинное копьё' },
+  { key: 'light_spear',label: 'Дротик / ополч. копьё' },
+  { key: 'long_pike',  label: 'Сарисса (очень длинная)' },
+  { key: 'ap',         label: 'Бронебойный' },
+  { key: 'bp',         label: 'Против укреплений' },
+  { key: 'fire',       label: 'Огненный' },
+  { key: 'thrown',     label: 'Метательный' },
+  { key: 'prec',       label: 'Точность (метат.)' },
+  { key: 'launching',  label: 'Катапультный' },
+  { key: 'area',       label: 'Площадной урон' },
+]
+
+// Строй: primary (всегда), secondary (опционально)
+export const FORMATION_PRIMARY   = ['square', 'horde']
+export const FORMATION_SECONDARY = ['', 'phalanx', 'testudo', 'wedge']

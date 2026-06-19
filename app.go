@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"image/png"
 	"modding-utils/internal/config"
 	"modding-utils/internal/domain"
@@ -16,11 +17,60 @@ import (
 	"path/filepath"
 	"strings"
 
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+type AppConfig struct {
+	Game            int    `json:"game"`
+	GamePath        string `json:"gamePath"`
+	SelectedModPath string `json:"selectedModPath"`
+}
+
+func appConfigPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	appDir := filepath.Join(dir, "total-war-mod-editor")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		return "", err
+	}
+	return filepath.Join(appDir, "config.json"), nil
+}
+
+func (a *App) LoadAppConfig() AppConfig {
+	path, err := appConfigPath()
+	if err != nil {
+		return AppConfig{Game: -1}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return AppConfig{Game: -1}
+	}
+	var cfg AppConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return AppConfig{Game: -1}
+	}
+	return cfg
+}
+
+func (a *App) SaveAppConfig(game int, gamePath, selectedModPath string) error {
+	path, err := appConfigPath()
+	if err != nil {
+		return err
+	}
+	cfg := AppConfig{Game: game, GamePath: gamePath, SelectedModPath: selectedModPath}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
 
 type App struct {
 	ctx             context.Context
 	gamePath        string
+	generalService  *service.GeneralService
 	unitService     *service.UnitService
 	factionService  *service.FactionService
 	buildingService *service.BuildingService
@@ -32,8 +82,39 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	// TODO: убрать когда фронтенд будет вызывать InitGame с путём от пользователя
-	_ = a.InitGame("./test-data/data", config.Rome)
+	a.generalService = service.NewGeneralService(nil)
+}
+
+// OpenDirectoryDialog открывает нативный диалог выбора папки.
+func (a *App) OpenDirectoryDialog() string {
+	path, _ := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Выберите папку с игрой",
+	})
+	return path
+}
+
+// InitGameFolder валидирует корневую папку игры и сканирует моды.
+func (a *App) InitGameFolder(game int, path string) error {
+	if err := a.generalService.InitGameFolder(config.GameVersion(game), path); err != nil {
+		return err
+	}
+	_ = a.generalService.CheckModsFolder()
+	return nil
+}
+
+// GetMods возвращает найденные моды: name → dataPath.
+func (a *App) GetMods() map[string]string {
+	return a.generalService.GetMods()
+}
+
+// GetBaseGameDataPath возвращает путь к data/ основной игры.
+func (a *App) GetBaseGameDataPath() string {
+	return a.generalService.GetGameSettings().GamePath
+}
+
+// AddModPath добавляет папку мода вручную (для RTW).
+func (a *App) AddModPath(path, name string) error {
+	return a.generalService.AddModPath(path, name)
 }
 
 // InitGame вызывается с фронтенда когда пользователь выбрал путь к игре.
