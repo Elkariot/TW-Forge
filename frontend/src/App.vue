@@ -1,15 +1,116 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { GetFactions, GetUnitsByFaction, Save, HasUnsavedChanges, CopyUnit } from '../wailsjs/go/main/App'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import {
+  GetFactions, GetUnitsByFaction, GetDeletedUnits, Save, HasUnsavedChanges, CopyUnit,
+  GetM2TWFactions, GetM2TWUnitsByFaction, GetM2TWDeletedUnits, SaveM2TW, M2TWHasUnsavedChanges,
+  CopyM2TWUnit,
+} from '../wailsjs/go/main/App'
 import UnitDetail from './components/UnitDetail.vue'
+import UnitCreateModal from './components/UnitCreateModal.vue'
+import M2TWUnitDetail from './components/M2TWUnitDetail.vue'
+import M2TWUnitCreateModal from './components/M2TWUnitCreateModal.vue'
 import SetupScreen from './components/SetupScreen.vue'
 import RecruitEditor from './components/RecruitEditor.vue'
+import BuildingEditor from './components/BuildingEditor.vue'
+import M2TWBuildingEditor from './components/M2TWBuildingEditor.vue'
+import M2TWRecruitEditor from './components/M2TWRecruitEditor.vue'
 
 const screen = ref('setup') // 'setup' | 'editor'
+const gameVersion = ref(null) // 0 = Medieval, 1 = Rome
+const isM2TW = computed(() => gameVersion.value === 0)
 
-async function onGameReady() {
+// ── Темы оформления ──────────────────────────────────────────
+const THEMES = {
+  spring: {
+    label: 'Весенний',
+    vars: {
+      '--color-primary': '#faace1', '--color-primary-hover': '#e090c8',
+      '--color-secondary': '#f7daee', '--color-cell': '#f0ecc5',
+      '--color-accent': '#95e8e1', '--color-heading': '#3aaa9e',
+      '--color-bg': '#fdf5f9', '--color-text': '#3a2035',
+      '--color-text-dim': '#9a7080', '--color-text-muted': '#b090a0',
+      '--color-border': '#e8c8da', '--color-border-soft': '#ddb8cc',
+      '--color-input-bg': '#fff8fb', '--color-error': '#c03060',
+    },
+  },
+  ocean: {
+    label: 'Морской',
+    vars: {
+      '--color-primary': '#7ab8f5', '--color-primary-hover': '#5a98d5',
+      '--color-secondary': '#d4eaff', '--color-cell': '#e8f4ff',
+      '--color-accent': '#40c8e0', '--color-heading': '#2090b0',
+      '--color-bg': '#f0f8ff', '--color-text': '#1a3050',
+      '--color-text-dim': '#5070a0', '--color-text-muted': '#8090b0',
+      '--color-border': '#b8d8f0', '--color-border-soft': '#90b8d8',
+      '--color-input-bg': '#f8fcff', '--color-error': '#c03050',
+    },
+  },
+  forest: {
+    label: 'Лесной',
+    vars: {
+      '--color-primary': '#98d878', '--color-primary-hover': '#78b858',
+      '--color-secondary': '#d8f0c8', '--color-cell': '#f0f8e8',
+      '--color-accent': '#60c840', '--color-heading': '#3a8028',
+      '--color-bg': '#f4faf0', '--color-text': '#1e3818',
+      '--color-text-dim': '#5a7850', '--color-text-muted': '#8a9880',
+      '--color-border': '#b8dca0', '--color-border-soft': '#98c080',
+      '--color-input-bg': '#f8fcf4', '--color-error': '#c03040',
+    },
+  },
+  papyrus: {
+    label: 'Папирус',
+    vars: {
+      '--color-primary': '#C8A850', '--color-primary-hover': '#A88030',
+      '--color-secondary': '#DCC880', '--color-cell': '#EED898',
+      '--color-accent': '#8B6020', '--color-heading': '#5A3808',
+      '--color-bg': '#E8D090', '--color-text': '#2A1800',
+      '--color-text-dim': '#6A4820', '--color-text-muted': '#9A7840',
+      '--color-border': '#C0A050', '--color-border-soft': '#B09040',
+      '--color-input-bg': '#F4E8B0', '--color-error': '#8B2010',
+    },
+  },
+  dark: {
+    label: 'Темница',
+    vars: {
+      '--color-primary': '#7A5018', '--color-primary-hover': '#5A3808',
+      '--color-secondary': '#221C10', '--color-cell': '#2A2214',
+      '--color-accent': '#C49030', '--color-heading': '#D4A840',
+      '--color-bg': '#181208', '--color-text': '#E0D09A',
+      '--color-text-dim': '#9A8058', '--color-text-muted': '#685838',
+      '--color-border': '#382A14', '--color-border-soft': '#2C2010',
+      '--color-input-bg': '#1C1608', '--color-error': '#C04820',
+    },
+  },
+}
+
+const currentTheme = ref('spring')
+const showThemePicker = ref(false)
+
+function applyTheme(key) {
+  const theme = THEMES[key]
+  if (!theme) return
+  const root = document.documentElement
+  for (const [k, v] of Object.entries(theme.vars)) root.style.setProperty(k, v)
+  currentTheme.value = key
+  showThemePicker.value = false
+  localStorage.setItem('tw-theme', key)
+}
+
+function closeThemePicker(e) {
+  if (!e.target.closest('.theme-picker-wrap')) showThemePicker.value = false
+}
+
+onMounted(() => {
+  const saved = localStorage.getItem('tw-theme')
+  applyTheme(saved && THEMES[saved] ? saved : 'spring')
+  document.addEventListener('click', closeThemePicker)
+})
+onUnmounted(() => document.removeEventListener('click', closeThemePicker))
+
+async function onGameReady(game) {
+  gameVersion.value = game
   screen.value = 'editor'
-  factions.value = await GetFactions()
+  factions.value = isM2TW.value ? await GetM2TWFactions() : await GetFactions()
 }
 
 const activeTab = ref('units') // 'units' | 'buildings'
@@ -21,35 +122,103 @@ const selectedUnitType = ref(null)
 const hasChanges = ref(false)
 const applying = ref(false)
 const applyError = ref(null)
+const showDeleted = ref(false)
+const deletedUnits = ref([])
+const showCreateModal = ref(false)
 
-onMounted(() => {})
 
 async function selectFaction(faction) {
   selectedFaction.value = faction.Name
-  unitGroups.value = await GetUnitsByFaction(faction.Name)
+  unitGroups.value = isM2TW.value
+    ? await GetM2TWUnitsByFaction(faction.Name)
+    : await GetUnitsByFaction(faction.Name)
   selectedUnitType.value = null
+  if (showDeleted.value) deletedUnits.value = isM2TW.value
+    ? await GetM2TWDeletedUnits()
+    : await GetDeletedUnits()
+}
+
+async function toggleShowDeleted() {
+  showDeleted.value = !showDeleted.value
+  if (showDeleted.value) {
+    deletedUnits.value = isM2TW.value ? await GetM2TWDeletedUnits() : await GetDeletedUnits()
+  } else {
+    deletedUnits.value = []
+    if (deletedUnits.value.includes(d => d.Type === selectedUnitType.value)) selectedUnitType.value = null
+  }
 }
 
 function selectUnit(unit) {
   selectedUnitType.value = unit.Type
 }
 
-async function onUnitSaved() {
-  hasChanges.value = await HasUnsavedChanges()
+async function checkChanges() {
+  hasChanges.value = isM2TW.value ? await M2TWHasUnsavedChanges() : await HasUnsavedChanges()
 }
+
+async function onUnitSaved() { await checkChanges() }
 
 async function onUnitDeleted() {
-  unitGroups.value = await GetUnitsByFaction(selectedFaction.value)
+  if (selectedFaction.value) {
+    unitGroups.value = isM2TW.value
+      ? await GetM2TWUnitsByFaction(selectedFaction.value)
+      : await GetUnitsByFaction(selectedFaction.value)
+  }
   selectedUnitType.value = null
-  hasChanges.value = await HasUnsavedChanges()
+  await checkChanges()
+  if (showDeleted.value) {
+    deletedUnits.value = isM2TW.value ? await GetM2TWDeletedUnits() : await GetDeletedUnits()
+  }
 }
 
-async function copyUnit(unit) {
+async function onUnitRestored() {
+  if (selectedFaction.value) {
+    unitGroups.value = isM2TW.value
+      ? await GetM2TWUnitsByFaction(selectedFaction.value)
+      : await GetUnitsByFaction(selectedFaction.value)
+  }
+  if (showDeleted.value) {
+    deletedUnits.value = isM2TW.value ? await GetM2TWDeletedUnits() : await GetDeletedUnits()
+  }
+  selectedUnitType.value = null
+  await checkChanges()
+}
+
+async function onUnitCreated(newType) {
+  showCreateModal.value = false
+  if (selectedFaction.value) {
+    unitGroups.value = isM2TW.value
+      ? await GetM2TWUnitsByFaction(selectedFaction.value)
+      : await GetUnitsByFaction(selectedFaction.value)
+  }
+  selectedUnitType.value = newType
+  await checkChanges()
+}
+
+// ── Диалог копирования ───────────────────────────────────────
+const copyDialog = ref(null) // { unit }
+const copyTargetFaction = ref('')
+
+function openCopyDialog(unit) {
+  copyTargetFaction.value = selectedFaction.value ?? factions.value[0]?.Name ?? ''
+  copyDialog.value = { unit }
+}
+
+async function confirmCopy() {
+  const unit = copyDialog.value?.unit
+  if (!unit || !copyTargetFaction.value) return
+  copyDialog.value = null
   try {
-    const newType = await CopyUnit(unit.Type, selectedFaction.value)
-    unitGroups.value = await GetUnitsByFaction(selectedFaction.value)
+    const newType = isM2TW.value
+      ? await CopyM2TWUnit(unit.Type, copyTargetFaction.value)
+      : await CopyUnit(unit.Type, copyTargetFaction.value)
+    if (copyTargetFaction.value === selectedFaction.value) {
+      unitGroups.value = isM2TW.value
+        ? await GetM2TWUnitsByFaction(selectedFaction.value)
+        : await GetUnitsByFaction(selectedFaction.value)
+    }
     selectedUnitType.value = newType
-    hasChanges.value = await HasUnsavedChanges()
+    await checkChanges()
   } catch (e) {
     applyError.value = `Ошибка копирования: ${e}`
   }
@@ -59,8 +228,8 @@ async function applyToGame() {
   applying.value = true
   applyError.value = null
   try {
-    await Save()
-    hasChanges.value = await HasUnsavedChanges()
+    isM2TW.value ? await SaveM2TW() : await Save()
+    await checkChanges()
   } catch (e) {
     applyError.value = String(e)
   } finally {
@@ -78,6 +247,27 @@ async function applyToGame() {
     <div class="topbar">
       <span class="topbar-title">Total War Mod Editor</span>
       <div class="topbar-actions">
+        <div class="theme-picker-wrap">
+          <button class="btn-theme" @click.stop="showThemePicker = !showThemePicker" title="Сменить тему">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+              <path d="M12 3C7 3 3 7 3 12s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+            </svg>
+          </button>
+          <div v-if="showThemePicker" class="theme-dropdown">
+            <button
+              v-for="(theme, key) in THEMES"
+              :key="key"
+              class="theme-option"
+              :class="{ active: currentTheme === key }"
+              @click.stop="applyTheme(key)"
+            >
+              <span class="theme-swatch" :style="{ background: theme.vars['--color-primary'] }"></span>
+              <span class="theme-swatch" :style="{ background: theme.vars['--color-secondary'] }"></span>
+              <span class="theme-swatch" :style="{ background: theme.vars['--color-cell'] }"></span>
+              {{ theme.label }}
+            </button>
+          </div>
+        </div>
         <span v-if="applyError" class="topbar-error">{{ applyError }}</span>
         <button class="btn-apply" :disabled="applying || !hasChanges" @click="applyToGame">
           {{ applying ? 'Запись...' : 'Применить к игре' }}
@@ -126,7 +316,22 @@ async function applyToGame() {
 
     <!-- Список юнитов -->
     <div class="unit-list" v-if="selectedFaction">
-      <h2>{{ selectedFaction }}</h2>
+      <div class="unit-list-header">
+        <h2>{{ selectedFaction }}</h2>
+        <div class="unit-list-actions">
+          <button
+            class="toggle-deleted-btn"
+            :class="{ active: showDeleted }"
+            @click="toggleShowDeleted"
+            title="Показать удалённых юнитов"
+          >🗑</button>
+          <button
+            class="unit-add-btn"
+            @click="showCreateModal = true"
+            title="Добавить юнита"
+          >+</button>
+        </div>
+      </div>
       <div v-for="(classes, category) in unitGroups" :key="category" class="category">
         <h3>{{ category }}</h3>
         <div v-for="(units, cls) in classes" :key="cls" class="class-group">
@@ -139,10 +344,29 @@ async function applyToGame() {
               @click="selectUnit(unit)"
             >
               <span class="unit-name">{{ unit.Name || unit.Type }}</span>
-              <button class="unit-copy-btn" @click.stop="copyUnit(unit)" title="Копировать юнит">⧉</button>
+              <button class="unit-copy-btn" @click.stop="openCopyDialog(unit)" title="Копировать юнит">⧉</button>
             </li>
           </ul>
         </div>
+      </div>
+
+      <!-- Удалённые юниты -->
+      <div v-if="showDeleted && deletedUnits.length > 0" class="category deleted-section">
+        <h3>Удалённые</h3>
+        <ul class="class-group">
+          <li
+            v-for="unit in deletedUnits"
+            :key="unit.Type"
+            :class="{ active: selectedUnitType === unit.Type }"
+            class="deleted-unit"
+            @click="selectUnit(unit)"
+          >
+            <span class="unit-name">{{ unit.Name || unit.Type }}</span>
+          </li>
+        </ul>
+      </div>
+      <div v-else-if="showDeleted && deletedUnits.length === 0" class="deleted-empty">
+        Нет удалённых юнитов
       </div>
     </div>
     <div class="unit-list hint-panel" v-else>
@@ -151,31 +375,76 @@ async function applyToGame() {
 
     <!-- Детали юнита -->
     <div class="detail-panel">
-      <UnitDetail :unit-type="selectedUnitType" :faction="selectedFaction" @saved="onUnitSaved" @reverted="onUnitSaved" @deleted="onUnitDeleted" />
+      <M2TWUnitDetail
+        v-if="isM2TW"
+        :unit-type="selectedUnitType"
+        :faction="selectedFaction"
+        @saved="onUnitSaved"
+        @reverted="onUnitSaved"
+        @deleted="onUnitDeleted"
+        @restored="onUnitRestored"
+      />
+      <UnitDetail
+        v-else
+        :unit-type="selectedUnitType"
+        :faction="selectedFaction"
+        @saved="onUnitSaved"
+        @reverted="onUnitSaved"
+        @deleted="onUnitDeleted"
+        @restored="onUnitRestored"
+      />
     </div>
+
+    <!-- Модал создания юнита -->
+    <M2TWUnitCreateModal
+      v-if="showCreateModal && isM2TW"
+      :faction="selectedFaction"
+      @close="showCreateModal = false"
+      @created="onUnitCreated"
+    />
+    <UnitCreateModal
+      v-else-if="showCreateModal"
+      :faction="selectedFaction"
+      @close="showCreateModal = false"
+      @created="onUnitCreated"
+    />
 
     </template>
 
-    <!-- Вкладка: Здания (заглушка) -->
-    <div v-else-if="activeTab === 'buildings'" class="placeholder-panel">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="placeholder-icon">
-        <path d="M3 21h18v-2H3v2zM5 9.5v9.5h3V9.5H5zm5.5 0v9.5h3V9.5h-3zM16 9.5v9.5h3V9.5h-3zM2 7.5l10-5 10 5v1.5H2V7.5z"/>
-      </svg>
-      <div class="placeholder-title">Редактор зданий</div>
-      <div class="placeholder-sub">В разработке</div>
-    </div>
+    <!-- Вкладка: Здания -->
+    <M2TWBuildingEditor v-else-if="activeTab === 'buildings' && isM2TW" class="tab-fill" @changed="onUnitSaved" />
+    <BuildingEditor v-else-if="activeTab === 'buildings'" class="tab-fill" @changed="onUnitSaved" />
 
     <!-- Вкладка: Найм -->
+    <M2TWRecruitEditor v-else-if="activeTab === 'recruit' && isM2TW" class="tab-fill" />
     <RecruitEditor v-else-if="activeTab === 'recruit'" />
 
     </div> <!-- below-topbar -->
+  </div>
+
+  <!-- Диалог копирования юнита -->
+  <div v-if="copyDialog" class="copy-overlay" @click.self="copyDialog = null">
+    <div class="copy-modal">
+      <div class="copy-modal-title">Копировать юнит</div>
+      <div class="copy-modal-unit">{{ copyDialog.unit.Name || copyDialog.unit.Type }}</div>
+      <label class="copy-modal-label">Скопировать во фракцию</label>
+      <select v-model="copyTargetFaction" class="copy-modal-select">
+        <option v-for="f in factions" :key="f.Name" :value="f.Name">
+          {{ f.DisplayName || f.Name }}
+        </option>
+      </select>
+      <div class="copy-modal-actions">
+        <button class="copy-btn-confirm" @click="confirmCopy">Копировать</button>
+        <button class="copy-btn-cancel" @click="copyDialog = null">Отмена</button>
+      </div>
+    </div>
   </div>
 </template>
 
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
+body { font-family: sans-serif; background: var(--color-bg); color: var(--color-text); }
 
 .layout { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
@@ -185,24 +454,53 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
   justify-content: space-between;
   padding: 0 16px;
   height: 44px;
-  background: #0d1117;
-  border-bottom: 1px solid #1e2e50;
+  background: var(--color-secondary);
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
-.topbar-title { font-size: 13px; font-weight: 600; color: #aaa; }
+.topbar-title { font-size: 13px; font-weight: 600; color: var(--color-text-dim); }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
-.topbar-error { font-size: 12px; color: #e94560; }
+.topbar-error { font-size: 12px; color: var(--color-error); }
 .btn-apply {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1e4a8a;
+  background: var(--color-primary);
+  color: var(--color-text);
+  border: 1px solid var(--color-primary-hover);
   padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
 }
-.btn-apply:hover { background: #1a4a80; }
+.btn-apply:hover { background: var(--color-primary-hover); }
 .btn-apply:disabled { opacity: 0.5; cursor: default; }
+
+.theme-picker-wrap { position: relative; }
+.btn-theme {
+  background: transparent; border: 1px solid var(--color-border);
+  border-radius: 6px; padding: 5px 7px; cursor: pointer;
+  color: var(--color-text-dim); display: flex; align-items: center;
+  transition: background 0.15s;
+}
+.btn-theme:hover { background: var(--color-cell); }
+.theme-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--color-cell); border: 1px solid var(--color-border-soft);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 500;
+  min-width: 140px;
+}
+.theme-option {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; border: none; background: transparent;
+  border-radius: 5px; cursor: pointer; font-size: 12px;
+  color: var(--color-text); text-align: left;
+  transition: background 0.1s;
+}
+.theme-option:hover { background: var(--color-secondary); }
+.theme-option.active { background: var(--color-primary); font-weight: 600; }
+.theme-swatch {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+}
 
 .below-topbar { display: flex; flex: 1; overflow: hidden; }
 
@@ -210,8 +508,8 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
 .nav-rail {
   width: 48px;
   flex-shrink: 0;
-  background: #0d1117;
-  border-right: 1px solid #1e2e50;
+  background: var(--color-secondary);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -224,40 +522,26 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #444;
+  color: var(--color-text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s, color 0.15s;
 }
-.nav-btn:hover { background: #16213e; color: #aaa; }
-.nav-btn.active { background: #0f3460; color: #e94560; }
-
-/* Заглушки вкладок */
-.placeholder-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #2a3a5e;
-}
-.placeholder-icon { opacity: 0.4; }
-.placeholder-title { font-size: 16px; font-weight: 600; color: #2a3a5e; }
-.placeholder-sub { font-size: 12px; color: #1e2e50; }
+.nav-btn:hover { background: var(--color-cell); color: #5a3050; }
+.nav-btn.active { background: var(--color-primary); color: var(--color-text); }
 
 /* Фракции */
 .sidebar {
   width: 200px;
   flex-shrink: 0;
-  background: #16213e;
+  background: var(--color-cell);
   padding: 16px;
   overflow-y: auto;
-  border-right: 1px solid #1e2e50;
+  border-right: 1px solid var(--color-border);
 }
-.sidebar h2 { font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 12px; letter-spacing: 0.05em; }
+.sidebar h2 { font-size: 11px; text-transform: uppercase; color: var(--color-text-dim); margin-bottom: 12px; letter-spacing: 0.05em; }
 .sidebar ul { list-style: none; }
 .sidebar li {
   padding: 7px 10px;
@@ -265,8 +549,8 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
   cursor: pointer;
   font-size: 12px;
 }
-.sidebar li:hover { background: #0f3460; }
-.sidebar li.active { background: #e94560; color: #fff; }
+.sidebar li:hover { background: var(--color-primary); }
+.sidebar li.active { background: var(--color-primary); color: var(--color-text); }
 
 /* Список юнитов */
 .unit-list {
@@ -274,26 +558,57 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
   flex-shrink: 0;
   padding: 16px;
   overflow-y: auto;
-  border-right: 1px solid #1e2e50;
+  border-right: 1px solid var(--color-border);
 }
-.unit-list h2 { font-size: 13px; color: #aaa; margin-bottom: 14px; }
+.unit-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.unit-list-header h2 { font-size: 13px; color: var(--color-text-dim); margin-bottom: 0; }
+.unit-list-actions { display: flex; align-items: center; gap: 4px; }
+.unit-add-btn {
+  background: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 1px 6px 2px;
+  cursor: pointer;
+}
+.unit-add-btn:hover { border-color: #3aba80; color: #3aba80; }
+.unit-list h2 { font-size: 13px; color: var(--color-text-dim); margin-bottom: 14px; }
+.toggle-deleted-btn {
+  background: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.toggle-deleted-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.toggle-deleted-btn.active { border-color: var(--color-accent); color: var(--color-accent); background: rgba(149,232,225,0.2); }
+.deleted-section h3 { color: #664; border-color: #332; }
+.deleted-unit { opacity: 0.55; }
+.deleted-unit:hover { opacity: 0.8; }
+.deleted-unit.active { opacity: 1; }
+.deleted-empty { font-size: 11px; color: var(--color-text-muted); padding: 4px 0; }
 
 .hint-panel { display: flex; align-items: center; justify-content: center; }
-.hint { color: #444; font-size: 13px; }
+.hint { color: var(--color-text-muted); font-size: 13px; }
 
 .category { margin-bottom: 20px; }
 .category h3 {
   font-size: 10px;
   text-transform: uppercase;
-  color: #e94560;
-  border-bottom: 1px solid #1e2e50;
+  color: var(--color-heading);
+  border-bottom: 1px solid var(--color-border);
   padding-bottom: 4px;
   margin-bottom: 8px;
   letter-spacing: 0.05em;
 }
 
 .class-group { margin-bottom: 10px; }
-.class-group h4 { font-size: 10px; color: #555; margin-bottom: 4px; text-transform: uppercase; }
+.class-group h4 { font-size: 10px; color: var(--color-text-muted); margin-bottom: 4px; text-transform: uppercase; }
 .class-group ul { list-style: none; }
 .class-group li {
   display: flex;
@@ -303,24 +618,24 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
   border-radius: 3px;
   font-size: 12px;
   cursor: pointer;
-  color: #ccc;
+  color: var(--color-text-dim);
 }
-.class-group li:hover { background: #16213e; }
-.class-group li.active { background: #0f3460; color: #fff; }
+.class-group li:hover { background: var(--color-cell); }
+.class-group li.active { background: var(--color-primary); color: var(--color-text); }
 .unit-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unit-copy-btn {
   visibility: hidden;
   flex-shrink: 0;
   background: none;
   border: none;
-  color: #888;
+  color: var(--color-text-dim);
   cursor: pointer;
   font-size: 13px;
   padding: 0 2px;
   line-height: 1;
 }
 .class-group li:hover .unit-copy-btn { visibility: visible; }
-.unit-copy-btn:hover { color: #e94560; }
+.unit-copy-btn:hover { color: var(--color-accent); }
 
 /* Панель деталей */
 .detail-panel {
@@ -329,4 +644,46 @@ body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
   display: flex;
   flex-direction: column;
 }
+
+/* Вкладки на весь экран */
+.tab-fill {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Диалог копирования */
+.copy-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 300;
+}
+.copy-modal {
+  background: var(--color-cell); border: 1px solid var(--color-border-soft);
+  border-radius: 10px; padding: 20px 24px; width: 300px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.copy-modal-title { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.copy-modal-unit {
+  font-size: 12px; color: var(--color-text-dim);
+  background: var(--color-input-bg); border: 1px solid var(--color-border);
+  border-radius: 4px; padding: 6px 10px;
+}
+.copy-modal-label { font-size: 11px; color: var(--color-text-muted); }
+.copy-modal-select {
+  background: var(--color-input-bg); border: 1px solid var(--color-border-soft);
+  border-radius: 4px; color: var(--color-text); font-size: 12px; padding: 6px 8px;
+}
+.copy-modal-select:focus { outline: none; border-color: var(--color-accent); }
+.copy-modal-actions { display: flex; gap: 8px; margin-top: 4px; }
+.copy-btn-confirm {
+  flex: 1; background: var(--color-primary); border: none; border-radius: 5px;
+  color: var(--color-text); font-size: 12px; padding: 8px; cursor: pointer;
+}
+.copy-btn-confirm:hover { background: var(--color-primary-hover); }
+.copy-btn-cancel {
+  background: transparent; border: 1px solid var(--color-border-soft);
+  border-radius: 5px; color: var(--color-text-muted); font-size: 12px;
+  padding: 8px 14px; cursor: pointer;
+}
+.copy-btn-cancel:hover { border-color: var(--color-text-muted); }
 </style>

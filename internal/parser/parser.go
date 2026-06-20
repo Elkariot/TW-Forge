@@ -354,6 +354,7 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 	inUpgrades := false
 	var pendingLevelName string
 	var pendingLevelFactions []string
+	var pendingLevelDependency *domain.BuildingDependency
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -379,9 +380,11 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 				currentLevel = domain.BuildingLevel{
 					Name:             pendingLevelName,
 					RequiredCultures: pendingLevelFactions,
+					Dependency:       pendingLevelDependency,
 				}
 				pendingLevelName = ""
 				pendingLevelFactions = nil
+				pendingLevelDependency = nil
 			}
 			continue
 		case "}":
@@ -411,6 +414,7 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 			if fields[0] != "levels" {
 				pendingLevelName = fields[0]
 				pendingLevelFactions = extractFactions(line)
+				pendingLevelDependency = extractBuildingDependency(line)
 			}
 		case 3:
 			switch fields[0] {
@@ -424,11 +428,19 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 				currentLevel.Cost = parseInt(fields[1])
 			case "settlement_min":
 				currentLevel.SettlementMin = fields[1]
+			case "building_present_min_level":
+				if len(fields) >= 3 {
+					currentLevel.Dependency = &domain.BuildingDependency{Group: fields[1], Level: fields[2]}
+				}
 			}
 		case 4:
-			if inCapability && fields[0] == "recruit" {
-				if slot, ok := parseRecruitLine(line); ok {
-					currentLevel.RecruitSlots = append(currentLevel.RecruitSlots, slot)
+			if inCapability {
+				if fields[0] == "recruit" {
+					if slot, ok := parseRecruitLine(line); ok {
+						currentLevel.RecruitSlots = append(currentLevel.RecruitSlots, slot)
+					}
+				} else {
+					currentLevel.BonusLines = append(currentLevel.BonusLines, line)
 				}
 			} else if inUpgrades {
 				currentLevel.Upgrades = append(currentLevel.Upgrades, trimComma(fields[0]))
@@ -437,6 +449,19 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 	}
 
 	return buildings, scanner.Err()
+}
+
+func extractBuildingDependency(line string) *domain.BuildingDependency {
+	const marker = "building_present_min_level"
+	idx := strings.Index(line, marker)
+	if idx == -1 {
+		return nil
+	}
+	parts := strings.Fields(line[idx:])
+	if len(parts) < 3 {
+		return nil
+	}
+	return &domain.BuildingDependency{Group: parts[1], Level: parts[2]}
 }
 
 func extractFactions(line string) []string {

@@ -25,6 +25,7 @@ type GameRepository interface {
 
 	// Units
 	GetAllUnits() []domain.Unit
+	GetDeletedUnits() []domain.Unit
 	GetAllUnitsTypes() []string
 	GetUnitsByFaction(faction string) ([]domain.Unit, error)
 	GetUnitByType(unitType string) (domain.Unit, bool)
@@ -35,6 +36,7 @@ type GameRepository interface {
 	GetUnitBuildings(unitType string) []domain.RecruitLocation
 	GetCultureBuildings(culture string) []domain.BuildingGroup
 	UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error
+	UpdateBuildingLevelProps(groupName, levelName string, cost, construction int, settlementMin string, requiredCultures []string, dependencyGroup, dependencyLevel string, upgrades, bonusLines []string) error
 	RevertBuildings() error
 	SaveBuildingsDraft() error
 

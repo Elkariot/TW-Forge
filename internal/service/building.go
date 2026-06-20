@@ -55,6 +55,13 @@ func (s *BuildingService) UpdateBuildingLevel(groupName, levelName string, slots
 	return s.repo.SaveBuildingsDraft()
 }
 
+func (s *BuildingService) UpdateBuildingLevelProps(groupName, levelName string, cost, construction int, settlementMin string, requiredCultures []string, dependencyGroup, dependencyLevel string, upgrades, bonusLines []string) error {
+	if err := s.repo.UpdateBuildingLevelProps(groupName, levelName, cost, construction, settlementMin, requiredCultures, dependencyGroup, dependencyLevel, upgrades, bonusLines); err != nil {
+		return err
+	}
+	return s.repo.SaveBuildingsDraft()
+}
+
 func (s *BuildingService) RevertBuildings() error {
 	return s.repo.RevertBuildings()
 }

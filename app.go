@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"image/png"
+	"fmt"
+	"io"
 	"modding-utils/internal/config"
 	"modding-utils/internal/domain"
 	"modding-utils/internal/parser"
@@ -13,6 +15,7 @@ import (
 	"modding-utils/internal/service"
 	"modding-utils/internal/tgadecoder"
 	"modding-utils/internal/writer"
+	"sort"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,9 +24,10 @@ import (
 )
 
 type AppConfig struct {
-	Game            int    `json:"game"`
-	GamePath        string `json:"gamePath"`
-	SelectedModPath string `json:"selectedModPath"`
+	Game            int               `json:"game"`
+	GamePath        string            `json:"gamePath"`
+	SelectedModPath string            `json:"selectedModPath"`
+	ManualMods      map[string]string `json:"manualMods,omitempty"`
 }
 
 func appConfigPath() (string, error) {
@@ -55,25 +59,51 @@ func (a *App) LoadAppConfig() AppConfig {
 }
 
 func (a *App) SaveAppConfig(game int, gamePath, selectedModPath string) error {
-	path, err := appConfigPath()
+	cfgPath, err := appConfigPath()
 	if err != nil {
 		return err
 	}
-	cfg := AppConfig{Game: game, GamePath: gamePath, SelectedModPath: selectedModPath}
+	// Preserve ManualMods from existing config.
+	existing := a.loadRawConfig()
+	cfg := AppConfig{
+		Game:            game,
+		GamePath:        gamePath,
+		SelectedModPath: selectedModPath,
+		ManualMods:      existing.ManualMods,
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(cfgPath, data, 0644)
+}
+
+func (a *App) loadRawConfig() AppConfig {
+	path, err := appConfigPath()
+	if err != nil {
+		return AppConfig{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return AppConfig{}
+	}
+	var cfg AppConfig
+	_ = json.Unmarshal(data, &cfg)
+	return cfg
 }
 
 type App struct {
-	ctx             context.Context
-	gamePath        string
-	generalService  *service.GeneralService
-	unitService     *service.UnitService
-	factionService  *service.FactionService
-	buildingService *service.BuildingService
+	ctx              context.Context
+	gamePath         string
+	baseGameDataPath string // пустая если мод не выбран (gamePath и есть база)
+	gameVersion      config.GameVersion
+	generalService   *service.GeneralService
+	unitService      *service.UnitService
+	factionService   *service.FactionService
+	buildingService  *service.BuildingService
+	// M2TW services (non-nil only when gameVersion == config.Medieval)
+	m2twUnitService     *service.M2TWUnitService
+	m2twBuildingService *service.M2TWBuildingService
 }
 
 func NewApp() *App {
@@ -112,25 +142,72 @@ func (a *App) GetBaseGameDataPath() string {
 	return a.generalService.GetGameSettings().GamePath
 }
 
-// AddModPath добавляет папку мода вручную (для RTW).
-func (a *App) AddModPath(path, name string) error {
-	return a.generalService.AddModPath(path, name)
+// AddModPath добавляет папку мода вручную (для RTW) и сохраняет в конфиг.
+func (a *App) AddModPath(modPath, name string) error {
+	if err := a.generalService.AddModPath(modPath, name); err != nil {
+		return err
+	}
+	cfgPath, err := appConfigPath()
+	if err != nil {
+		return nil // не критично
+	}
+	cfg := a.loadRawConfig()
+	if cfg.ManualMods == nil {
+		cfg.ManualMods = make(map[string]string)
+	}
+	cfg.ManualMods[name] = modPath
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil
+	}
+	_ = os.WriteFile(cfgPath, data, 0644)
+	return nil
 }
 
 // InitGame вызывается с фронтенда когда пользователь выбрал путь к игре.
 func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
-	p := parser.New(gameVersion, gamePath)
-	gameData, err := p.ParseTextFiles()
-	if err != nil {
-		return err
+	a.gamePath = gamePath
+	a.gameVersion = gameVersion
+
+	// Определяем базовый путь к данным игры из конфига.
+	cfg := a.loadRawConfig()
+	if cfg.GamePath != "" {
+		baseData := filepath.Join(cfg.GamePath, "data")
+		if !strings.EqualFold(filepath.Clean(baseData), filepath.Clean(gamePath)) {
+			a.baseGameDataPath = baseData
+		} else {
+			a.baseGameDataPath = ""
+		}
 	}
 
+	p := parser.New(gameVersion, gamePath)
 	w := writer.New(gamePath)
-	repo := repository.New(*gameData, w)
-	a.gamePath = gamePath
-	a.unitService = service.NewUnitService(repo)
-	a.factionService = service.NewFactionService(repo)
-	a.buildingService = service.NewBuildingService(repo)
+
+	if gameVersion == config.Medieval {
+		gameData, err := p.ParseM2TW()
+		if err != nil {
+			return err
+		}
+		repo := repository.NewM2TW(*gameData, w)
+		a.m2twUnitService = service.NewM2TWUnitService(repo)
+		a.m2twBuildingService = service.NewM2TWBuildingService(repo)
+		// Clear RTW services
+		a.unitService = nil
+		a.factionService = nil
+		a.buildingService = nil
+	} else {
+		gameData, err := p.ParseTextFiles()
+		if err != nil {
+			return err
+		}
+		repo := repository.New(*gameData, w)
+		a.unitService = service.NewUnitService(repo)
+		a.factionService = service.NewFactionService(repo)
+		a.buildingService = service.NewBuildingService(repo)
+		// Clear M2TW services
+		a.m2twUnitService = nil
+		a.m2twBuildingService = nil
+	}
 	return nil
 }
 
@@ -142,12 +219,20 @@ func (a *App) GetAllUnits() []domain.Unit {
 	return a.unitService.GetAllUnits()
 }
 
+func (a *App) GetDeletedUnits() []domain.Unit {
+	return a.unitService.GetDeletedUnits()
+}
+
 func (a *App) GetBuildings() []domain.BuildingGroup {
 	return a.buildingService.GetBuildings()
 }
 
 func (a *App) UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error {
 	return a.buildingService.UpdateBuildingLevel(groupName, levelName, slots)
+}
+
+func (a *App) UpdateBuildingLevelProps(groupName, levelName string, cost, construction int, settlementMin string, requiredCultures []string, dependencyGroup, dependencyLevel string, upgrades, bonusLines []string) error {
+	return a.buildingService.UpdateBuildingLevelProps(groupName, levelName, cost, construction, settlementMin, requiredCultures, dependencyGroup, dependencyLevel, upgrades, bonusLines)
 }
 
 func (a *App) RevertBuildings() error {
@@ -174,6 +259,11 @@ func (a *App) Save() error {
 	return a.unitService.Save()
 }
 
+// Validate возвращает список проблем юнита или пустой срез если всё ок.
+func (a *App) Validate(originalType string, unit domain.Unit) []string {
+	return a.unitService.Validate(unit, originalType)
+}
+
 func (a *App) GetCultureNames() []string {
 	return a.buildingService.GetCultureNames()
 }
@@ -190,8 +280,16 @@ func (a *App) CopyUnit(unitType, faction string) (string, error) {
 	return a.unitService.CopyUnit(unitType, faction)
 }
 
+func (a *App) CreateUnit(templateType, newType, faction string) error {
+	return a.unitService.CreateUnit(templateType, newType, faction)
+}
+
 func (a *App) GetUnitChangeType(unitType string) string {
 	return a.unitService.GetUnitChangeType(unitType)
+}
+
+func (a *App) DeleteUnit(unitType string) error {
+	return a.unitService.Delete(unitType)
 }
 
 func (a *App) RevertUnit(unitType string) error {
@@ -202,42 +300,384 @@ func (a *App) RevertAll() {
 	a.unitService.RevertAll()
 }
 
-// GetUnitIcon возвращает data:image/png;base64,... или "" если иконка не найдена.
-// RTW хранит иконки в UI/units/{faction}/#{model}.tga
-func (a *App) GetUnitIcon(unitType, faction string) string {
-	unit, err := a.unitService.GetUnitByType(unitType)
-	if err != nil || unit.Soldier.Model == "" {
-		return ""
+// findAsset ищет файл сначала в папке мода, потом в базовой игре.
+// Возвращает абсолютный путь и источник ("mod", "base", "").
+func (a *App) findAsset(relPath string) (absPath, source string) {
+	check := func(root, src string) (string, string) {
+		p := filepath.Join(root, relPath)
+		if _, err := os.Stat(p); err == nil {
+			return p, src
+		}
+		return "", ""
 	}
-	filename := "#" + strings.ToLower(unit.Soldier.Model) + ".tga"
+	if p, s := check(a.gamePath, "mod"); p != "" {
+		return p, s
+	}
+	if a.baseGameDataPath != "" {
+		if p, s := check(a.baseGameDataPath, "base"); p != "" {
+			return p, s
+		}
+	}
+	return "", ""
+}
 
-	candidates := []string{
-		filepath.Join(a.gamePath, "UI", "units", faction, filename),
-		filepath.Join(a.gamePath, "UI", "units", faction, strings.ToUpper(filename)),
+// iconRelPaths возвращает список relative-путей для иконки юнита (с fallback на короткое имя фракции).
+func iconRelPaths(model, faction string) []string {
+	filename := "#" + strings.ToLower(model) + ".tga"
+	rels := []string{
+		filepath.Join("UI", "units", faction, filename),
+		filepath.Join("UI", "units", faction, strings.ToUpper(filename)),
 	}
-	// для romans_julii → julii
 	if idx := strings.LastIndex(faction, "_"); idx != -1 {
 		short := faction[idx+1:]
-		candidates = append(candidates,
-			filepath.Join(a.gamePath, "UI", "units", short, filename),
-			filepath.Join(a.gamePath, "UI", "units", short, strings.ToUpper(filename)),
+		rels = append(rels,
+			filepath.Join("UI", "units", short, filename),
+			filepath.Join("UI", "units", short, strings.ToUpper(filename)),
 		)
 	}
+	return rels
+}
 
-	for _, path := range candidates {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		img, err := tgadecoder.Decode(data)
-		if err != nil {
-			continue
-		}
-		var buf bytes.Buffer
-		if err := png.Encode(&buf, img); err != nil {
-			continue
-		}
-		return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+func tgaToBase64PNG(absPath string) string {
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return ""
 	}
-	return ""
+	img, err := tgadecoder.Decode(data)
+	if err != nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return ""
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
+// GetUnitIcon возвращает data:image/png;base64,... или "".
+func (a *App) GetUnitIcon(unitType, faction string) string {
+	info := a.GetUnitIconInfo(unitType, faction)
+	return info.Data
+}
+
+// GetUnitIconInfo возвращает иконку + источник (mod/base/"") + relative path.
+func (a *App) GetUnitIconInfo(unitType, faction string) domain.IconInfo {
+	unit, err := a.unitService.GetUnitByType(unitType)
+	if err != nil || unit.Soldier.Model == "" {
+		return domain.IconInfo{}
+	}
+	for _, rel := range iconRelPaths(unit.Soldier.Model, faction) {
+		abs, src := a.findAsset(rel)
+		if abs == "" {
+			continue
+		}
+		data := tgaToBase64PNG(abs)
+		if data == "" {
+			continue
+		}
+		return domain.IconInfo{Data: data, Source: src, RelPath: filepath.ToSlash(rel)}
+	}
+	// Иконка не найдена — возвращаем только ожидаемый путь
+	rels := iconRelPaths(unit.Soldier.Model, faction)
+	return domain.IconInfo{RelPath: filepath.ToSlash(rels[0])}
+}
+
+// GetDataPaths возвращает пути к данным: mod (активный) и base (базовая игра, если мод выбран).
+func (a *App) GetDataPaths() map[string]string {
+	result := map[string]string{"mod": a.gamePath}
+	if a.baseGameDataPath != "" {
+		result["base"] = a.baseGameDataPath
+	}
+	return result
+}
+
+// PickFile открывает нативный диалог выбора файла. Возвращает путь или "".
+func (a *App) PickFile(title, filterName, filterPattern string) string {
+	path, _ := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: title,
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: filterName, Pattern: filterPattern},
+		},
+	})
+	return path
+}
+
+// SaveIconFile копирует файл иконки в указанную корневую папку data с правильным именем.
+func (a *App) SaveIconFile(unitType, faction, srcPath, destDataRoot string) error {
+	unit, err := a.unitService.GetUnitByType(unitType)
+	if err != nil {
+		return err
+	}
+	filename := "#" + strings.ToLower(unit.Soldier.Model) + ".tga"
+	rel := filepath.Join("UI", "units", faction, filename)
+	dst := filepath.Join(destDataRoot, rel)
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
+	return copyFileRaw(srcPath, dst)
+}
+
+// GetUnitModelFiles возвращает CAS-файлы модели юнита из обоих путей.
+func (a *App) GetUnitModelFiles(unitType string) []domain.AssetFile {
+	unit, err := a.unitService.GetUnitByType(unitType)
+	if err != nil || unit.Soldier.Model == "" {
+		return nil
+	}
+	return a.findAssetFiles("models_unit", unit.Soldier.Model)
+}
+
+// GetUnitTextureFiles возвращает файлы текстур модели юнита из обоих путей.
+func (a *App) GetUnitTextureFiles(unitType string) []domain.AssetFile {
+	unit, err := a.unitService.GetUnitByType(unitType)
+	if err != nil || unit.Soldier.Model == "" {
+		return nil
+	}
+	return a.findAssetFiles(filepath.Join("models_unit", "textures"), unit.Soldier.Model)
+}
+
+// findAssetFiles ищет файлы в subdir, имя которых начинается с modelName (без учёта регистра).
+func (a *App) findAssetFiles(subdir, modelName string) []domain.AssetFile {
+	seen := map[string]bool{}
+	var result []domain.AssetFile
+	prefix := strings.ToLower(modelName)
+
+	for _, root := range []struct{ dir, src string }{{a.gamePath, "mod"}, {a.baseGameDataPath, "base"}} {
+		if root.dir == "" {
+			continue
+		}
+		dir := filepath.Join(root.dir, subdir)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if !strings.HasPrefix(strings.ToLower(e.Name()), prefix) {
+				continue
+			}
+			rel := filepath.ToSlash(filepath.Join(subdir, e.Name()))
+			if seen[strings.ToLower(rel)] {
+				continue
+			}
+			seen[strings.ToLower(rel)] = true
+			result = append(result, domain.AssetFile{
+				Name:    e.Name(),
+				RelPath: rel,
+				Source:  root.src,
+			})
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
+}
+
+// CopyAssetToRoot копирует файл по абсолютному srcPath в destDataRoot сохраняя relPath.
+func (a *App) CopyAssetToRoot(srcAbsPath, destDataRoot, relPath string) error {
+	dst := filepath.Join(destDataRoot, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
+	return copyFileRaw(srcAbsPath, dst)
+}
+
+// UploadAssetFile копирует произвольный файл в subdir внутри destDataRoot.
+func (a *App) UploadAssetFile(srcPath, destDataRoot, subdir string) error {
+	filename := filepath.Base(srcPath)
+	dst := filepath.Join(destDataRoot, filepath.FromSlash(subdir), filename)
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
+	return copyFileRaw(srcPath, dst)
+}
+
+// AbsAssetPath возвращает абсолютный путь к файлу по его relPath и источнику.
+func (a *App) AbsAssetPath(relPath, source string) string {
+	root := a.gamePath
+	if source == "base" && a.baseGameDataPath != "" {
+		root = a.baseGameDataPath
+	}
+	return filepath.Join(root, filepath.FromSlash(relPath))
+}
+
+// ── M2TW API ──────────────────────────────────────────────────────────────────
+
+func (a *App) GetM2TWFactions() []domain.M2TWFaction {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetFactions()
+}
+
+func (a *App) GetM2TWAllUnits() []domain.M2TWUnit {
+	if a.m2twUnitService == nil {
+		return nil
+	}
+	return a.m2twUnitService.GetAllUnits()
+}
+
+func (a *App) GetM2TWDeletedUnits() []domain.M2TWUnit {
+	if a.m2twUnitService == nil {
+		return nil
+	}
+	return a.m2twUnitService.GetDeletedUnits()
+}
+
+func (a *App) GetM2TWUnitsByFaction(faction string) (map[string]map[string][]domain.M2TWUnit, error) {
+	if a.m2twUnitService == nil {
+		return nil, fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.GetFactionUnitsByCategoryAndClass(faction)
+}
+
+func (a *App) GetM2TWUnitByType(unitType string) (*domain.M2TWUnit, error) {
+	if a.m2twUnitService == nil {
+		return nil, fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.GetUnitByType(unitType)
+}
+
+func (a *App) UpdateM2TWUnit(originalType string, unit domain.M2TWUnit) error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.Update(originalType, unit)
+}
+
+func (a *App) CopyM2TWUnit(unitType, faction string) (string, error) {
+	if a.m2twUnitService == nil {
+		return "", fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.CopyUnit(unitType, faction)
+}
+
+func (a *App) CreateM2TWUnit(templateType, newType, faction string) error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.CreateUnit(templateType, newType, faction)
+}
+
+func (a *App) DeleteM2TWUnit(unitType string) error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.Delete(unitType)
+}
+
+func (a *App) RevertM2TWUnit(unitType string) error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.Revert(unitType)
+}
+
+func (a *App) RevertM2TWAll() {
+	if a.m2twUnitService != nil {
+		a.m2twUnitService.RevertAll()
+	}
+}
+
+func (a *App) GetM2TWUnitChangeType(unitType string) string {
+	if a.m2twUnitService == nil {
+		return "none"
+	}
+	return a.m2twUnitService.GetUnitChangeType(unitType)
+}
+
+func (a *App) ValidateM2TWUnit(originalType string, unit domain.M2TWUnit) []string {
+	if a.m2twUnitService == nil {
+		return nil
+	}
+	return a.m2twUnitService.Validate(unit, originalType)
+}
+
+func (a *App) M2TWHasUnsavedChanges() bool {
+	return a.m2twUnitService != nil && a.m2twUnitService.HasUnsavedChanges()
+}
+
+func (a *App) SaveM2TW() error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.Save()
+}
+
+func (a *App) GetM2TWBuildings() []domain.M2TWBuildingGroup {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetBuildings()
+}
+
+func (a *App) GetM2TWFactionBuildings(faction string) []domain.M2TWBuildingGroup {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetFactionBuildings(faction)
+}
+
+func (a *App) UpdateM2TWBuildingLevel(groupName, levelName string, pools []domain.M2TWRecruitPool, bonusLines []string) error {
+	if a.m2twBuildingService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twBuildingService.UpdateBuildingLevel(groupName, levelName, pools, bonusLines)
+}
+
+func (a *App) UpdateM2TWBuildingLevelProps(groupName, levelName string, cost, construction, convertTo int, settlementMin, settlementType string, requiredFactions []string, dependencyGroup, dependencyLevel string, upgrades []string) error {
+	if a.m2twBuildingService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twBuildingService.UpdateBuildingLevelProps(groupName, levelName, cost, construction, convertTo, settlementMin, settlementType, requiredFactions, dependencyGroup, dependencyLevel, upgrades)
+}
+
+func (a *App) RevertM2TWBuildings() error {
+	if a.m2twBuildingService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twBuildingService.RevertBuildings()
+}
+
+func (a *App) GetM2TWReligions() []string {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetReligions()
+}
+
+func (a *App) GetM2TWHiddenResources() []string {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetHiddenResources()
+}
+
+func (a *App) GetM2TWProjectileTypes() []string {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetProjectileTypes()
+}
+
+func (a *App) GetM2TWUnitBuildings(unitType string) []domain.RecruitLocation {
+	if a.m2twBuildingService == nil {
+		return nil
+	}
+	return a.m2twBuildingService.GetUnitBuildings(unitType)
+}
+
+func copyFileRaw(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }

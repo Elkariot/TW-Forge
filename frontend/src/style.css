@@ -1,12 +1,29 @@
+:root {
+    --color-primary: #faace1;
+    --color-primary-hover: #e090c8;
+    --color-secondary: #f7daee;
+    --color-cell: #f0ecc5;
+    --color-accent: #95e8e1;
+    --color-heading: #3aaa9e;
+    --color-bg: #fdf5f9;
+    --color-text: #3a2035;
+    --color-text-dim: #9a7080;
+    --color-text-muted: #b090a0;
+    --color-border: #e8c8da;
+    --color-border-soft: #ddb8cc;
+    --color-input-bg: #fff8fb;
+    --color-error: #c03060;
+}
+
 html {
-    background-color: rgba(27, 38, 54, 1);
+    background-color: var(--color-bg);
     text-align: center;
-    color: white;
+    color: var(--color-text);
 }
 
 body {
     margin: 0;
-    color: white;
+    color: var(--color-text);
     font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;

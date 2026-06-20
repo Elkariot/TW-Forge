@@ -32,6 +32,7 @@ type Unit struct {
 	StatCost      CostStats
 
 	Ownership []string
+	IsDeleted bool
 
 	Name       string
 	Descr      string

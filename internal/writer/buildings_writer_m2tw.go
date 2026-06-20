@@ -10,32 +10,32 @@ import (
 	"strings"
 )
 
-func (w *GameWriter) SaveBuildingsDraft(data domain.GameData) error {
+func (w *GameWriter) SaveM2TWBuildingsDraft(data domain.M2TWGameData) error {
 	if err := w.ensureInit(); err != nil {
 		return err
 	}
 	dst := filepath.Join(w.draftPath, "export_descr_buildings.txt")
-	return w.patchBuildings(dst, data)
+	return w.patchM2TWBuildings(dst, data)
 }
 
-func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
+func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) error {
 	srcFile, err := os.Open(filepath.Join(w.gamePath, "export_descr_buildings.txt"))
 	if err != nil {
-		return fmt.Errorf("open buildings: %w", err)
+		return fmt.Errorf("open M2TW buildings: %w", err)
 	}
 	defer srcFile.Close()
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
-		return fmt.Errorf("create draft buildings: %w", err)
+		return fmt.Errorf("create draft M2TW buildings: %w", err)
 	}
 	defer dstFile.Close()
 
-	type key struct{ group, level string }
-	levelIndex := make(map[key]domain.BuildingLevel)
+	type levelKey struct{ group, level string }
+	levelIndex := make(map[levelKey]domain.M2TWBuildingLevel)
 	for _, g := range data.Buildings {
 		for _, l := range g.Levels {
-			levelIndex[key{g.Name, l.Name}] = l
+			levelIndex[levelKey{g.Name, l.Name}] = l
 		}
 	}
 
@@ -46,16 +46,13 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 	depth := 0
 	currentGroup := ""
 	currentLevel := ""
-
-	inCapability := false
 	inCapBlock := false
-	capIndent := "\t\t\t\t"
-
-	inUpgrades := false
 	inUpgradeBlock := false
+	inCapability := false
+	inUpgrades := false
+	capIndent := "\t\t\t\t"
 	upgradeIndent := "\t\t\t\t"
-
-	depWritten := false // tracking whether we wrote building_present_min_level for current level
+	depWritten := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -67,25 +64,27 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 				depWritten = false
 			}
 			fmt.Fprintln(bw, line)
-
 			if depth == 4 {
 				if inCapability {
 					inCapBlock = true
 					inCapability = false
-					k := key{currentGroup, currentLevel}
-					lvl := levelIndex[k]
-					for _, bonus := range lvl.BonusLines {
-						fmt.Fprintln(bw, capIndent+bonus)
-					}
-					for _, slot := range lvl.RecruitSlots {
-						fmt.Fprintln(bw, capIndent+formatBuildingSlot(slot))
+					k := levelKey{currentGroup, currentLevel}
+					if lvl, ok := levelIndex[k]; ok {
+						for _, bonus := range lvl.BonusLines {
+							fmt.Fprintln(bw, capIndent+bonus)
+						}
+						for _, pool := range lvl.RecruitPools {
+							fmt.Fprintln(bw, capIndent+formatM2TWRecruitPool(pool))
+						}
 					}
 				} else if inUpgrades {
 					inUpgradeBlock = true
 					inUpgrades = false
-					k := key{currentGroup, currentLevel}
-					for _, upg := range levelIndex[k].Upgrades {
-						fmt.Fprintln(bw, upgradeIndent+upg)
+					k := levelKey{currentGroup, currentLevel}
+					if lvl, ok := levelIndex[k]; ok {
+						for _, upg := range lvl.Upgrades {
+							fmt.Fprintln(bw, upgradeIndent+upg)
+						}
 					}
 				}
 			}
@@ -94,14 +93,10 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 
 		if trimmed == "}" {
 			if depth == 4 {
-				if inCapBlock {
-					inCapBlock = false
-				} else if inUpgradeBlock {
-					inUpgradeBlock = false
-				}
-			} else if depth == 3 && !depWritten && currentGroup != "" && currentLevel != "" {
-				// Inject dependency before closing level block if not yet written
-				k := key{currentGroup, currentLevel}
+				inCapBlock = false
+				inUpgradeBlock = false
+			} else if depth == 3 && !depWritten {
+				k := levelKey{currentGroup, currentLevel}
 				if lvl, ok := levelIndex[k]; ok && lvl.Dependency != nil && lvl.Dependency.Group != "" {
 					indent := leadingWhitespace(line) + "\t"
 					fmt.Fprintln(bw, indent+"building_present_min_level "+lvl.Dependency.Group+" "+lvl.Dependency.Level)
@@ -113,7 +108,6 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 			continue
 		}
 
-		// Пропускаем всё содержимое capability-блока и upgrades-блока.
 		if trimmed != "" && !strings.HasPrefix(trimmed, ";") {
 			if inCapBlock {
 				if lead := leadingWhitespace(line); lead != "" {
@@ -129,16 +123,15 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 			}
 		}
 
-		// Заменяем строку определения уровня (depth 2).
 		if depth == 2 && trimmed != "" && !strings.HasPrefix(trimmed, ";") {
 			fields := strings.Fields(trimmed)
 			if len(fields) > 0 && fields[0] != "levels" {
 				lvlName := fields[0]
 				currentLevel = lvlName
 				indent := leadingWhitespace(line)
-				k := key{currentGroup, lvlName}
+				k := levelKey{currentGroup, lvlName}
 				if lvl, ok := levelIndex[k]; ok {
-					fmt.Fprintln(bw, indent+formatLevelDefinition(lvlName, lvl))
+					fmt.Fprintln(bw, indent+formatM2TWLevelDefinition(lvlName, lvl))
 				} else {
 					fmt.Fprintln(bw, line)
 				}
@@ -146,28 +139,31 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 			}
 		}
 
-		// Заменяем свойства уровня здания (depth 3).
 		if depth == 3 && currentGroup != "" && currentLevel != "" && trimmed != "" && !strings.HasPrefix(trimmed, ";") {
 			fields := strings.Fields(trimmed)
 			indent := leadingWhitespace(line)
-			k := key{currentGroup, currentLevel}
-			lvl := levelIndex[k]
-			if len(fields) >= 1 {
+			k := levelKey{currentGroup, currentLevel}
+			lvl, lvlOk := levelIndex[k]
+			if len(fields) >= 1 && lvlOk {
 				switch fields[0] {
 				case "construction":
-					fmt.Fprintln(bw, indent+"construction\t"+strconv.Itoa(lvl.Construction))
+					fmt.Fprintln(bw, indent+"construction  "+strconv.Itoa(lvl.Construction))
 					continue
 				case "cost":
-					fmt.Fprintln(bw, indent+"cost\t"+strconv.Itoa(lvl.Cost))
+					fmt.Fprintln(bw, indent+"cost  "+strconv.Itoa(lvl.Cost))
 					continue
 				case "settlement_min":
 					if lvl.SettlementMin != "" {
 						fmt.Fprintln(bw, indent+"settlement_min "+lvl.SettlementMin)
 					}
 					continue
-				case "building_present_min_level":
-					// Always skip original; will inject updated value before capability/upgrades/}
+				case "convert_to":
+					if lvl.ConvertTo != 0 {
+						fmt.Fprintln(bw, indent+"convert_to "+strconv.Itoa(lvl.ConvertTo))
+					}
 					continue
+				case "building_present_min_level":
+					continue // will inject updated version before capability/upgrades/}
 				case "capability", "upgrades":
 					if !depWritten {
 						if lvl.Dependency != nil && lvl.Dependency.Group != "" {
@@ -184,19 +180,17 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 		if trimmed == "" || strings.HasPrefix(trimmed, ";") {
 			continue
 		}
-
 		fields := strings.Fields(trimmed)
 		if len(fields) == 0 {
 			continue
 		}
-
 		switch depth {
 		case 0:
 			if fields[0] == "building" && len(fields) > 1 {
 				currentGroup = fields[1]
 			}
 		case 3:
-			switch trimmed {
+			switch fields[0] {
 			case "capability":
 				inCapability = true
 				ci := leadingWhitespace(line)
@@ -218,14 +212,18 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("scan buildings: %w", err)
+		return fmt.Errorf("scan M2TW buildings: %w", err)
 	}
 	return bw.Flush()
 }
 
-func formatLevelDefinition(name string, lvl domain.BuildingLevel) string {
+func formatM2TWLevelDefinition(name string, lvl domain.M2TWBuildingLevel) string {
 	var sb strings.Builder
 	sb.WriteString(name)
+	if lvl.SettlementType != "" {
+		sb.WriteString(" ")
+		sb.WriteString(lvl.SettlementType)
+	}
 	if len(lvl.RequiredCultures) > 0 {
 		sb.WriteString(" requires factions { ")
 		for _, c := range lvl.RequiredCultures {
@@ -237,27 +235,21 @@ func formatLevelDefinition(name string, lvl domain.BuildingLevel) string {
 	return sb.String()
 }
 
-func formatBuildingSlot(slot domain.RecruitSlot) string {
+func formatM2TWRecruitPool(pool domain.M2TWRecruitPool) string {
 	var sb strings.Builder
-	sb.WriteString("recruit \"")
-	sb.WriteString(slot.UnitType)
-	sb.WriteString("\" ")
-	sb.WriteString(strconv.Itoa(slot.Level))
-	if len(slot.Requirements) > 0 {
-		sb.WriteString(" requires factions { ")
-		for _, f := range slot.Requirements {
+	fmt.Fprintf(&sb, `recruit_pool "%s"  %d   %.6g   %d  %d`,
+		pool.UnitType, pool.InitialPool, pool.ReplenishRate, pool.MaxPool, pool.ExpGained)
+	if len(pool.Factions) > 0 {
+		sb.WriteString("  requires factions { ")
+		for _, f := range pool.Factions {
 			sb.WriteString(f)
 			sb.WriteString(", ")
 		}
 		sb.WriteString("}")
 	}
-	if slot.Conditions != "" {
+	if pool.Conditions != "" {
 		sb.WriteString(" ")
-		sb.WriteString(slot.Conditions)
+		sb.WriteString(pool.Conditions)
 	}
 	return sb.String()
-}
-
-func leadingWhitespace(s string) string {
-	return s[:len(s)-len(strings.TrimLeft(s, " \t"))]
 }

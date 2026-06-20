@@ -60,6 +60,12 @@ func (w *GameWriter) Apply() error {
 			return err
 		}
 	}
+	draftModelDB := filepath.Join(w.draftPath, "battle_models.modeldb")
+	if _, err := os.Stat(draftModelDB); err == nil {
+		if err := w.applyFile("battle_models.modeldb"); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

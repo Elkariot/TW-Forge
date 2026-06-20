@@ -51,6 +51,22 @@ onMounted(async () => {
   selectedGame.value = cfg.game
   gamePath.value = cfg.gamePath
   await validatePath()
+
+  // Восстановить вручную добавленные моды.
+  if (cfg.manualMods && Object.keys(cfg.manualMods).length > 0) {
+    for (const [name, path] of Object.entries(cfg.manualMods)) {
+      try { await AddModPath(path, name) } catch { /* путь мог исчезнуть */ }
+    }
+    // Перестроить список модов после восстановления.
+    const baseDataPath = await GetBaseGameDataPath()
+    const modsMap = await GetMods()
+    const list = [{ name: 'Base game', dataPath: baseDataPath }]
+    for (const [n, dataPath] of Object.entries(modsMap)) {
+      list.push({ name: prettify(n), dataPath })
+    }
+    mods.value = list
+  }
+
   if (cfg.selectedModPath && mods.value.length > 0) {
     const found = mods.value.find(m => m.dataPath === cfg.selectedModPath)
     if (found) selectedMod.value = found
@@ -124,7 +140,7 @@ async function launch() {
   launchError.value = ''
   try {
     await InitGame(selectedMod.value.dataPath, selectedGame.value)
-    emit('ready')
+    emit('ready', selectedGame.value)
   } catch (e) {
     launchError.value = String(e)
   } finally {
@@ -230,20 +246,20 @@ function prettify(name) {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 /* Шапка */
 .setup-header {
   padding: 20px 32px 16px;
-  border-bottom: 1px solid #1e2e50;
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 .setup-title {
   font-size: 20px;
   font-weight: 700;
-  color: #e0e0e0;
+  color: var(--color-text);
   letter-spacing: 0.03em;
 }
 
@@ -257,7 +273,7 @@ function prettify(name) {
 .col-left {
   flex: 1;
   padding: 32px;
-  border-right: 1px solid #1e2e50;
+  border-right: 1px solid var(--color-border);
   overflow-y: auto;
 }
 
@@ -273,7 +289,7 @@ function prettify(name) {
 .section-label {
   font-size: 11px;
   text-transform: uppercase;
-  color: #e94560;
+  color: var(--color-heading);
   letter-spacing: 0.08em;
   margin-bottom: 14px;
 }
@@ -290,13 +306,13 @@ function prettify(name) {
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
-  border: 2px solid #1e2e50;
-  background: #16213e;
+  border: 2px solid var(--color-border);
+  background: var(--color-cell);
   padding: 0;
   transition: border-color 0.15s, transform 0.15s;
 }
-.game-card:hover { border-color: #2a4a80; transform: translateY(-2px); }
-.game-card.selected { border-color: #e94560; }
+.game-card:hover { border-color: #e898d0; transform: translateY(-2px); }
+.game-card.selected { border-color: var(--color-accent); }
 
 .game-img {
   width: 100%;
@@ -308,11 +324,11 @@ function prettify(name) {
   font-size: 12px;
   font-weight: 600;
   padding: 8px 10px;
-  color: #ccc;
+  color: var(--color-text-dim);
   text-align: center;
-  background: #0f1b35;
+  background: var(--color-input-bg);
 }
-.game-card.selected .game-name { color: #fff; }
+.game-card.selected .game-name { color: var(--color-text); }
 
 /* Путь */
 .path-row {
@@ -321,30 +337,30 @@ function prettify(name) {
 }
 .path-input {
   flex: 1;
-  background: #0f1b35;
-  border: 1px solid #2a3a5e;
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-border-soft);
   border-radius: 4px;
-  color: #e0e0e0;
+  color: var(--color-text);
   font-size: 13px;
   padding: 8px 10px;
 }
-.path-input:focus { outline: none; border-color: #e94560; }
+.path-input:focus { outline: none; border-color: var(--color-accent); }
 .btn-browse {
-  background: #16213e;
-  border: 1px solid #2a3a5e;
+  background: var(--color-cell);
+  border: 1px solid var(--color-border-soft);
   border-radius: 4px;
-  color: #ccc;
+  color: var(--color-text-dim);
   font-size: 13px;
   padding: 8px 16px;
   cursor: pointer;
   white-space: nowrap;
 }
-.btn-browse:hover { border-color: #888; color: #fff; }
+.btn-browse:hover { border-color: var(--color-text-dim); color: var(--color-text); }
 .btn-browse:disabled { opacity: 0.5; cursor: default; }
 .path-error {
   margin-top: 8px;
   font-size: 12px;
-  color: #e94560;
+  color: var(--color-error);
 }
 
 /* Моды */
@@ -360,16 +376,16 @@ function prettify(name) {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  background: #16213e;
-  border: 1px solid #1e2e50;
+  background: var(--color-cell);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
   transition: border-color 0.12s, background 0.12s;
-  color: #ccc;
+  color: var(--color-text-dim);
 }
-.mod-entry:hover { border-color: #2a4a80; background: #1a2a50; }
-.mod-entry.selected { border-color: #e94560; background: #1a1a2e; color: #fff; }
+.mod-entry:hover { border-color: #e898d0; background: #f5e0ef; }
+.mod-entry.selected { border-color: var(--color-accent); background: var(--color-bg); color: var(--color-text); }
 
 .mod-radio {
   width: 16px;
@@ -381,34 +397,34 @@ function prettify(name) {
   align-items: center;
   justify-content: center;
 }
-.mod-entry.selected .mod-radio { border-color: #e94560; }
+.mod-entry.selected .mod-radio { border-color: var(--color-accent); }
 .mod-radio-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #e94560;
+  background: var(--color-primary);
 }
 .mod-name { font-size: 13px; font-weight: 500; }
 
 .btn-add-mod {
   align-self: flex-start;
   background: transparent;
-  border: 1px dashed #2a3a5e;
+  border: 1px dashed var(--color-border-soft);
   border-radius: 4px;
-  color: #666;
+  color: var(--color-text-muted);
   font-size: 12px;
   padding: 6px 14px;
   cursor: pointer;
   margin-top: 4px;
 }
-.btn-add-mod:hover { border-color: #888; color: #aaa; }
+.btn-add-mod:hover { border-color: var(--color-text-dim); color: var(--color-text-dim); }
 
 .mods-hint {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #333;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -419,13 +435,13 @@ function prettify(name) {
   justify-content: flex-end;
   gap: 14px;
   padding: 16px 32px;
-  border-top: 1px solid #1e2e50;
+  border-top: 1px solid var(--color-border);
   flex-shrink: 0;
 }
-.launch-error { font-size: 12px; color: #e94560; }
+.launch-error { font-size: 12px; color: var(--color-error); }
 .btn-launch {
-  background: #e94560;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-text);
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -435,6 +451,6 @@ function prettify(name) {
   letter-spacing: 0.02em;
   transition: background 0.15s;
 }
-.btn-launch:hover { background: #c73050; }
-.btn-launch:disabled { background: #3a1a28; color: #555; cursor: default; }
+.btn-launch:hover { background: var(--color-primary-hover); }
+.btn-launch:disabled { background: #f0d0e8; color: var(--color-text-muted); cursor: default; }
 </style>

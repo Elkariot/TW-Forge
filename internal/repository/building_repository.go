@@ -55,6 +55,36 @@ func (r *InMemoryRepository) UpdateBuildingLevel(groupName, levelName string, sl
 	return fmt.Errorf("building group %q not found", groupName)
 }
 
+func (r *InMemoryRepository) UpdateBuildingLevelProps(groupName, levelName string, cost, construction int, settlementMin string, requiredCultures []string, dependencyGroup, dependencyLevel string, upgrades, bonusLines []string) error {
+	for i := range r.working.Buildings {
+		if r.working.Buildings[i].Name != groupName {
+			continue
+		}
+		for j := range r.working.Buildings[i].Levels {
+			if r.working.Buildings[i].Levels[j].Name != levelName {
+				continue
+			}
+			lvl := &r.working.Buildings[i].Levels[j]
+			lvl.Cost = cost
+			lvl.Construction = construction
+			lvl.SettlementMin = settlementMin
+			lvl.RequiredCultures = requiredCultures
+			if dependencyGroup != "" {
+				lvl.Dependency = &domain.BuildingDependency{Group: dependencyGroup, Level: dependencyLevel}
+			} else {
+				lvl.Dependency = nil
+			}
+			lvl.Upgrades = upgrades
+			lvl.BonusLines = bonusLines
+			r.working.CultureBuildingIndex = domain.BuildCultureBuildingIndex(r.working.Buildings)
+			r.buildingsDirty = true
+			return nil
+		}
+		return fmt.Errorf("level %q not found in group %q", levelName, groupName)
+	}
+	return fmt.Errorf("building group %q not found", groupName)
+}
+
 func (r *InMemoryRepository) RevertBuildings() error {
 	orig := r.original.DeepCopy()
 	r.working.Buildings = orig.Buildings

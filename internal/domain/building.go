@@ -6,11 +6,19 @@ type BuildingGroup struct {
 	Levels      []BuildingLevel
 }
 
+// BuildingDependency — требуемое здание: building_present_min_level <Group> <Level>.
+type BuildingDependency struct {
+	Group string
+	Level string
+}
+
 type BuildingLevel struct {
 	Name             string
 	DisplayName      string
 	RequiredCultures []string
+	Dependency       *BuildingDependency
 	RecruitSlots     []RecruitSlot
+	BonusLines       []string
 	Construction     int
 	Cost             int
 	SettlementMin    string
