@@ -1,4 +1,4 @@
-module modding-utils
+module tw-forge
 
 go 1.26.4
 

@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"modding-utils/internal/domain"
+	"tw-forge/internal/domain"
 	"os"
 	"strconv"
 	"strings"

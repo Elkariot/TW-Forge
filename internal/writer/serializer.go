@@ -2,7 +2,7 @@ package writer
 
 import (
 	"fmt"
-	"modding-utils/internal/domain"
+	"tw-forge/internal/domain"
 	"strings"
 )
 

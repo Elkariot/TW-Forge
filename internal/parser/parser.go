@@ -3,8 +3,8 @@ package parser
 import (
 	"bufio"
 	"fmt"
-	"modding-utils/internal/config"
-	"modding-utils/internal/domain"
+	"tw-forge/internal/config"
+	"tw-forge/internal/domain"
 	"os"
 	"path/filepath"
 	"strconv"

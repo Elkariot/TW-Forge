@@ -2,7 +2,7 @@ package repository
 
 import (
 	"fmt"
-	"modding-utils/internal/domain"
+	"tw-forge/internal/domain"
 )
 
 func (r *InMemoryM2TWRepository) GetBuildings() []domain.M2TWBuildingGroup {

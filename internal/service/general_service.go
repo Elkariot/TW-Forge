@@ -3,8 +3,8 @@ package service
 import (
 	"errors"
 	"fmt"
-	"modding-utils/internal/config"
-	"modding-utils/internal/repository"
+	"tw-forge/internal/config"
+	"tw-forge/internal/repository"
 	"os"
 	"path/filepath"
 )

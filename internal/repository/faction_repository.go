@@ -1,6 +1,6 @@
 package repository
 
-import "modding-utils/internal/domain"
+import "tw-forge/internal/domain"
 
 func (r *InMemoryRepository) GetFactions() []domain.Faction {
 	return r.working.Factions

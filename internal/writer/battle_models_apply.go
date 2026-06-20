@@ -2,7 +2,7 @@ package writer
 
 import (
 	"fmt"
-	"modding-utils/internal/parser"
+	"tw-forge/internal/parser"
 	"os"
 	"path/filepath"
 )

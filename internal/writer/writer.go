@@ -3,8 +3,8 @@ package writer
 import (
 	"fmt"
 	"io"
-	"modding-utils/internal/domain"
-	"modding-utils/internal/repository"
+	"tw-forge/internal/domain"
+	"tw-forge/internal/repository"
 	"os"
 	"path/filepath"
 	"sync"

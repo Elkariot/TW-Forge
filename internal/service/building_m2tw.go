@@ -2,8 +2,8 @@ package service
 
 import (
 	"fmt"
-	"modding-utils/internal/domain"
-	"modding-utils/internal/repository"
+	"tw-forge/internal/domain"
+	"tw-forge/internal/repository"
 )
 
 type M2TWBuildingService struct {
