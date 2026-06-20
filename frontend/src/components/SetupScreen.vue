@@ -28,9 +28,8 @@ const launchError    = ref('')
 const isRestoring    = ref(false)
 
 const modsReady = computed(() => mods.value.length > 0)
-// TODO: также требовать что game folder валидирована через InitGameFolder
 const canLaunch = computed(() =>
-  selectedGame.value !== null && selectedMod.value !== null && !launching.value
+  selectedGame.value !== null && mods.value.length > 0 && selectedMod.value !== null && !launching.value
 )
 
 function saveConfig() {
@@ -157,7 +156,7 @@ function prettify(name) {
   <div class="setup">
 
     <div class="setup-header">
-      <div class="setup-title">⚔ Total War Mod Editor</div>
+      <div class="setup-title">⚔ TW Forge</div>
     </div>
 
     <div class="setup-body">
@@ -222,8 +221,7 @@ function prettify(name) {
           Моды появятся после выбора папки игры<br/>или добавьте мод вручную
         </div>
 
-        <!-- TODO: сделать неактивной пока не выбрана игра и не указан путь к папке -->
-        <button class="btn-add-mod" @click="browseAddMod">+ Добавить мод</button>
+        <button class="btn-add-mod" :disabled="selectedGame === null || !gamePath" @click="browseAddMod">+ Добавить мод</button>
 
       </div>
 

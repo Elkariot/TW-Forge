@@ -245,7 +245,7 @@ async function applyToGame() {
 
     <!-- Топбар -->
     <div class="topbar">
-      <span class="topbar-title">Total War Mod Editor</span>
+      <span class="topbar-title">TW Forge</span>
       <div class="topbar-actions">
         <div class="theme-picker-wrap">
           <button class="btn-theme" @click.stop="showThemePicker = !showThemePicker" title="Сменить тему">
