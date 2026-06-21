@@ -71,7 +71,15 @@ func (s *GeneralService) InitGameFolder(game config.GameVersion, userPath string
 			}
 		}
 	} else {
-		exeFound, _ = s.checkPath(filepath.Join(userPath, "medieval2.exe"))
+		for _, exe := range []string{"medieval2.exe", "kingdoms.exe"} {
+			if ok, _ := s.checkPath(filepath.Join(userPath, exe)); ok {
+				exeFound = true
+				break
+			}
+		}
+		if !exeFound {
+			exeFound, _ = s.checkPath(filepath.Join(userPath, "medieval2.preference.cfg"))
+		}
 	}
 	if !exeFound {
 		return fmt.Errorf("can't find game exe")

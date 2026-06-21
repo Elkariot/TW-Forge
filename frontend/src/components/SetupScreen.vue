@@ -5,6 +5,7 @@ import {
   GetBaseGameDataPath, AddModPath, InitGame,
   LoadAppConfig, SaveAppConfig,
 } from '../../wailsjs/go/main/App'
+import ThemePicker from './ThemePicker.vue'
 
 import romeImg from '../assets/images/Rome.jpg'
 import medievalImg from '../assets/images/Medieval.png'
@@ -157,6 +158,7 @@ function prettify(name) {
 
     <div class="setup-header">
       <div class="setup-title">⚔ TW Forge</div>
+      <ThemePicker />
     </div>
 
     <div class="setup-body">
@@ -250,6 +252,9 @@ function prettify(name) {
 
 /* Шапка */
 .setup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 20px 32px 16px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;

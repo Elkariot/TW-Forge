@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import {
   GetFactions, GetUnitsByFaction, GetDeletedUnits, Save, HasUnsavedChanges, CopyUnit,
   GetM2TWFactions, GetM2TWUnitsByFaction, GetM2TWDeletedUnits, SaveM2TW, M2TWHasUnsavedChanges,
@@ -14,103 +14,31 @@ import RecruitEditor from './components/RecruitEditor.vue'
 import BuildingEditor from './components/BuildingEditor.vue'
 import M2TWBuildingEditor from './components/M2TWBuildingEditor.vue'
 import M2TWRecruitEditor from './components/M2TWRecruitEditor.vue'
+import ThemePicker from './components/ThemePicker.vue'
 
 const screen = ref('setup') // 'setup' | 'editor'
 const gameVersion = ref(null) // 0 = Medieval, 1 = Rome
 const isM2TW = computed(() => gameVersion.value === 0)
 
-// ── Темы оформления ──────────────────────────────────────────
-const THEMES = {
-  spring: {
-    label: 'Весенний',
-    vars: {
-      '--color-primary': '#faace1', '--color-primary-hover': '#e090c8',
-      '--color-secondary': '#f7daee', '--color-cell': '#f0ecc5',
-      '--color-accent': '#95e8e1', '--color-heading': '#3aaa9e',
-      '--color-bg': '#fdf5f9', '--color-text': '#3a2035',
-      '--color-text-dim': '#9a7080', '--color-text-muted': '#b090a0',
-      '--color-border': '#e8c8da', '--color-border-soft': '#ddb8cc',
-      '--color-input-bg': '#fff8fb', '--color-error': '#c03060',
-    },
-  },
-  ocean: {
-    label: 'Морской',
-    vars: {
-      '--color-primary': '#7ab8f5', '--color-primary-hover': '#5a98d5',
-      '--color-secondary': '#d4eaff', '--color-cell': '#e8f4ff',
-      '--color-accent': '#40c8e0', '--color-heading': '#2090b0',
-      '--color-bg': '#f0f8ff', '--color-text': '#1a3050',
-      '--color-text-dim': '#5070a0', '--color-text-muted': '#8090b0',
-      '--color-border': '#b8d8f0', '--color-border-soft': '#90b8d8',
-      '--color-input-bg': '#f8fcff', '--color-error': '#c03050',
-    },
-  },
-  forest: {
-    label: 'Лесной',
-    vars: {
-      '--color-primary': '#98d878', '--color-primary-hover': '#78b858',
-      '--color-secondary': '#d8f0c8', '--color-cell': '#f0f8e8',
-      '--color-accent': '#60c840', '--color-heading': '#3a8028',
-      '--color-bg': '#f4faf0', '--color-text': '#1e3818',
-      '--color-text-dim': '#5a7850', '--color-text-muted': '#8a9880',
-      '--color-border': '#b8dca0', '--color-border-soft': '#98c080',
-      '--color-input-bg': '#f8fcf4', '--color-error': '#c03040',
-    },
-  },
-  papyrus: {
-    label: 'Папирус',
-    vars: {
-      '--color-primary': '#C8A850', '--color-primary-hover': '#A88030',
-      '--color-secondary': '#DCC880', '--color-cell': '#EED898',
-      '--color-accent': '#8B6020', '--color-heading': '#5A3808',
-      '--color-bg': '#E8D090', '--color-text': '#2A1800',
-      '--color-text-dim': '#6A4820', '--color-text-muted': '#9A7840',
-      '--color-border': '#C0A050', '--color-border-soft': '#B09040',
-      '--color-input-bg': '#F4E8B0', '--color-error': '#8B2010',
-    },
-  },
-  dark: {
-    label: 'Темница',
-    vars: {
-      '--color-primary': '#7A5018', '--color-primary-hover': '#5A3808',
-      '--color-secondary': '#221C10', '--color-cell': '#2A2214',
-      '--color-accent': '#C49030', '--color-heading': '#D4A840',
-      '--color-bg': '#181208', '--color-text': '#E0D09A',
-      '--color-text-dim': '#9A8058', '--color-text-muted': '#685838',
-      '--color-border': '#382A14', '--color-border-soft': '#2C2010',
-      '--color-input-bg': '#1C1608', '--color-error': '#C04820',
-    },
-  },
-}
-
-const currentTheme = ref('spring')
-const showThemePicker = ref(false)
-
-function applyTheme(key) {
-  const theme = THEMES[key]
-  if (!theme) return
-  const root = document.documentElement
-  for (const [k, v] of Object.entries(theme.vars)) root.style.setProperty(k, v)
-  currentTheme.value = key
-  showThemePicker.value = false
-  localStorage.setItem('tw-theme', key)
-}
-
-function closeThemePicker(e) {
-  if (!e.target.closest('.theme-picker-wrap')) showThemePicker.value = false
-}
-
-onMounted(() => {
-  const saved = localStorage.getItem('tw-theme')
-  applyTheme(saved && THEMES[saved] ? saved : 'spring')
-  document.addEventListener('click', closeThemePicker)
-})
-onUnmounted(() => document.removeEventListener('click', closeThemePicker))
-
 async function onGameReady(game) {
   gameVersion.value = game
   screen.value = 'editor'
   factions.value = isM2TW.value ? await GetM2TWFactions() : await GetFactions()
+}
+
+function goBack() {
+  screen.value = 'setup'
+  gameVersion.value = null
+  factions.value = []
+  selectedFaction.value = null
+  unitGroups.value = {}
+  selectedUnitType.value = null
+  deletedUnits.value = []
+  showDeleted.value = false
+  hasChanges.value = false
+  applyError.value = null
+  copyDialog.value = null
+  activeTab.value = 'units'
 }
 
 const activeTab = ref('units') // 'units' | 'buildings'
@@ -245,29 +173,16 @@ async function applyToGame() {
 
     <!-- Топбар -->
     <div class="topbar">
-      <span class="topbar-title">TW Forge</span>
+      <div class="topbar-left">
+        <button class="btn-back" @click="goBack" title="Вернуться к выбору игры">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <span class="topbar-title">TW Forge</span>
+      </div>
       <div class="topbar-actions">
-        <div class="theme-picker-wrap">
-          <button class="btn-theme" @click.stop="showThemePicker = !showThemePicker" title="Сменить тему">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-              <path d="M12 3C7 3 3 7 3 12s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-            </svg>
-          </button>
-          <div v-if="showThemePicker" class="theme-dropdown">
-            <button
-              v-for="(theme, key) in THEMES"
-              :key="key"
-              class="theme-option"
-              :class="{ active: currentTheme === key }"
-              @click.stop="applyTheme(key)"
-            >
-              <span class="theme-swatch" :style="{ background: theme.vars['--color-primary'] }"></span>
-              <span class="theme-swatch" :style="{ background: theme.vars['--color-secondary'] }"></span>
-              <span class="theme-swatch" :style="{ background: theme.vars['--color-cell'] }"></span>
-              {{ theme.label }}
-            </button>
-          </div>
-        </div>
+        <ThemePicker />
         <span v-if="applyError" class="topbar-error">{{ applyError }}</span>
         <button class="btn-apply" :disabled="applying || !hasChanges" @click="applyToGame">
           {{ applying ? 'Запись...' : 'Применить к игре' }}
@@ -458,9 +373,22 @@ body { font-family: sans-serif; background: var(--color-bg); color: var(--color-
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
+.topbar-left { display: flex; align-items: center; gap: 8px; }
 .topbar-title { font-size: 13px; font-weight: 600; color: var(--color-text-dim); }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
 .topbar-error { font-size: 12px; color: var(--color-error); }
+.btn-back {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 5px 7px;
+  cursor: pointer;
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+.btn-back:hover { background: var(--color-cell); color: var(--color-text); }
 .btn-apply {
   background: var(--color-primary);
   color: var(--color-text);
@@ -472,35 +400,6 @@ body { font-family: sans-serif; background: var(--color-bg); color: var(--color-
 }
 .btn-apply:hover { background: var(--color-primary-hover); }
 .btn-apply:disabled { opacity: 0.5; cursor: default; }
-
-.theme-picker-wrap { position: relative; }
-.btn-theme {
-  background: transparent; border: 1px solid var(--color-border);
-  border-radius: 6px; padding: 5px 7px; cursor: pointer;
-  color: var(--color-text-dim); display: flex; align-items: center;
-  transition: background 0.15s;
-}
-.btn-theme:hover { background: var(--color-cell); }
-.theme-dropdown {
-  position: absolute; top: calc(100% + 6px); right: 0;
-  background: var(--color-cell); border: 1px solid var(--color-border-soft);
-  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 500;
-  min-width: 140px;
-}
-.theme-option {
-  display: flex; align-items: center; gap: 6px;
-  padding: 7px 10px; border: none; background: transparent;
-  border-radius: 5px; cursor: pointer; font-size: 12px;
-  color: var(--color-text); text-align: left;
-  transition: background 0.1s;
-}
-.theme-option:hover { background: var(--color-secondary); }
-.theme-option.active { background: var(--color-primary); font-weight: 600; }
-.theme-swatch {
-  width: 10px; height: 10px; border-radius: 50%;
-  border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
-}
 
 .below-topbar { display: flex; flex: 1; overflow: hidden; }
 
