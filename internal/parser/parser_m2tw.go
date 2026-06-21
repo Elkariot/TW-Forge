@@ -196,7 +196,7 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 
 		switch keyword {
 		case "type":
-			unit = domain.M2TWUnit{Eras: make(map[int][]string)}
+			unit = domain.M2TWUnit{Eras: make(map[string][]string)}
 			unit.Type = strings.Join(fields[1:], " ")
 			isUnit = true
 
@@ -227,6 +227,10 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 			case "voice_type":
 				if len(fields) > 1 {
 					unit.VoiceType = fields[1]
+				}
+			case "accent":
+				if len(fields) > 1 {
+					unit.Accent = fields[1]
 				}
 			case "banner":
 				if len(fields) >= 3 {
@@ -356,15 +360,19 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 				if len(fields) < 3 {
 					continue
 				}
-				eraNum := parseInt(fields[1])
+				eraKey := strings.TrimSpace(fields[1])
 				if unit.Eras == nil {
-					unit.Eras = make(map[int][]string)
+					unit.Eras = make(map[string][]string)
 				}
 				for _, f := range fields[2:] {
 					faction := trimComma(f)
 					if faction != "" {
-						unit.Eras[eraNum] = append(unit.Eras[eraNum], faction)
+						unit.Eras[eraKey] = append(unit.Eras[eraKey], faction)
 					}
+				}
+			case "info_pic_dir":
+				if len(fields) > 1 {
+					unit.InfoPicDir = fields[1]
 				}
 			case "recruit_priority_offset":
 				if len(fields) > 1 {

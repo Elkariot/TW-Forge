@@ -156,14 +156,18 @@ func (p *Parser) parseUnits() ([]domain.Unit, error) {
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		raw := strings.TrimSpace(scanner.Text())
 
-		if line == "" || strings.HasPrefix(line, ";") {
+		if raw == "" || strings.HasPrefix(raw, ";") {
 			continue
 		}
 
-		if i := strings.Index(line, ";"); i != -1 {
-			line = strings.TrimSpace(line[:i])
+		// Извлекаем комментарий до стрипа (нужен для строки dictionary).
+		lineComment := ""
+		line := raw
+		if i := strings.Index(raw, ";"); i != -1 {
+			lineComment = strings.TrimSpace(raw[i+1:])
+			line = strings.TrimSpace(raw[:i])
 		}
 		if line == "" {
 			continue
@@ -199,7 +203,8 @@ func (p *Parser) parseUnits() ([]domain.Unit, error) {
 			}
 			switch keyword {
 			case "dictionary":
-				unit.Dictionary = strings.Join(fields[1:], " ")
+				unit.Dictionary = fields[1]
+				unit.DictionaryComment = lineComment
 			case "category":
 				unit.Category = fields[1]
 			case "class":

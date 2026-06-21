@@ -75,7 +75,7 @@ func (s *M2TWUnitService) CopyUnit(unitType, faction string) (string, error) {
 	unit.Type = newUnitType
 	unit.Dictionary = strings.ReplaceAll(newUnitType, " ", "_")
 	unit.Ownership = []string{faction}
-	unit.Eras = map[int][]string{0: {faction}, 1: {faction}, 2: {faction}}
+	unit.Eras = map[string][]string{"0": {faction}, "1": {faction}, "2": {faction}}
 
 	if err := s.repo.AddUnit(unit); err != nil {
 		return "", fmt.Errorf("error copying unit: %w", err)
@@ -98,7 +98,7 @@ func (s *M2TWUnitService) CreateUnit(templateType, newType, faction string) erro
 	unit.Type = newType
 	unit.Dictionary = strings.ReplaceAll(newType, " ", "_")
 	unit.Ownership = []string{faction}
-	unit.Eras = map[int][]string{0: {faction}, 1: {faction}, 2: {faction}}
+	unit.Eras = map[string][]string{"0": {faction}, "1": {faction}, "2": {faction}}
 	if err := s.repo.AddUnit(unit); err != nil {
 		return fmt.Errorf("ошибка создания юнита: %w", err)
 	}

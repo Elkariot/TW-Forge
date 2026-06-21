@@ -2,8 +2,9 @@ package writer
 
 import (
 	"fmt"
-	"tw-forge/internal/domain"
+	"strconv"
 	"strings"
+	"tw-forge/internal/domain"
 )
 
 func serializeUnit(u domain.Unit) []string {
@@ -14,7 +15,11 @@ func serializeUnit(u domain.Unit) []string {
 	}
 
 	add("type", u.Type)
-	add("dictionary", u.Dictionary)
+	if u.DictionaryComment != "" {
+		add("dictionary", u.Dictionary+"      ; "+u.DictionaryComment)
+	} else {
+		add("dictionary", u.Dictionary)
+	}
 	add("category", u.Category)
 	add("class", u.Class)
 	add("voice_type", u.VoiceType)
@@ -62,10 +67,15 @@ func serializeUnit(u domain.Unit) []string {
 }
 
 func serializeWeapon(s domain.WeaponStats) string {
-	return fmt.Sprintf("%d, %d, %s, %d, %d, %s, %s, %s, %s, %.1f, %.1f",
+	return fmt.Sprintf("%d, %d, %s, %d, %d, %s, %s, %s, %s, %s, %s",
 		s.Attack, s.ChargeBonus, s.Missile, s.Range, s.Ammo,
 		s.WeaponType, s.TechType, s.DamageType, s.SoundType,
-		s.MinDelay, s.Factor)
+		rtwFloat(s.MinDelay), rtwFloat(s.Factor))
+}
+
+// rtwFloat форматирует число без лишних нулей: 50.0 → "50", 0.73 → "0.73".
+func rtwFloat(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 func joinOrNo(s []string) string {

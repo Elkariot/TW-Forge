@@ -2,9 +2,10 @@ package writer
 
 import (
 	"fmt"
-	"tw-forge/internal/domain"
 	"sort"
+	"strconv"
 	"strings"
+	"tw-forge/internal/domain"
 )
 
 func serializeM2TWUnit(u domain.M2TWUnit) []string {
@@ -19,6 +20,9 @@ func serializeM2TWUnit(u domain.M2TWUnit) []string {
 	add("category", u.Category)
 	add("class", u.Class)
 	add("voice_type", u.VoiceType)
+	if u.Accent != "" {
+		add("accent", u.Accent)
+	}
 	if u.BannerFaction != "" {
 		add("banner faction", u.BannerFaction)
 	}
@@ -44,9 +48,9 @@ func serializeM2TWUnit(u domain.M2TWUnit) []string {
 	}
 	add("formation", u.Formation)
 	add("stat_health", fmt.Sprintf("%d, %d", u.StatHealth[0], u.StatHealth[1]))
-	add("stat_pri", serializeWeapon(u.StatPri))
+	add("stat_pri", serializeM2TWWeapon(u.StatPri))
 	add("stat_pri_attr", joinOrNo(u.StatPriAttr))
-	add("stat_sec", serializeWeapon(u.StatSec))
+	add("stat_sec", serializeM2TWWeapon(u.StatSec))
 	add("stat_sec_attr", joinOrNo(u.StatSecAttr))
 	add("stat_pri_armour", fmt.Sprintf("%d, %d, %d, %s",
 		u.StatPriArmour.Armour, u.StatPriArmour.DefSkill, u.StatPriArmour.Shield, u.StatPriArmour.Sound))
@@ -76,15 +80,21 @@ func serializeM2TWUnit(u domain.M2TWUnit) []string {
 	if len(u.Eras) > 0 {
 		eraKeys := make([]int, 0, len(u.Eras))
 		for k := range u.Eras {
-			eraKeys = append(eraKeys, k)
+			if n, err := strconv.Atoi(k); err == nil {
+				eraKeys = append(eraKeys, n)
+			}
 		}
 		sort.Ints(eraKeys)
 		for _, era := range eraKeys {
-			factions := u.Eras[era]
+			factions := u.Eras[strconv.Itoa(era)]
 			if len(factions) > 0 {
 				add(fmt.Sprintf("era %d", era), strings.Join(factions, ", "))
 			}
 		}
+	}
+
+	if u.InfoPicDir != "" {
+		add("info_pic_dir", u.InfoPicDir)
 	}
 
 	if u.RecruitPriorityOffset != 0 {
@@ -92,4 +102,11 @@ func serializeM2TWUnit(u domain.M2TWUnit) []string {
 	}
 
 	return lines
+}
+
+func serializeM2TWWeapon(s domain.WeaponStats) string {
+	return fmt.Sprintf("%d, %d, %s, %d, %d, %s, %s, %s, %s, %d, %d",
+		s.Attack, s.ChargeBonus, s.Missile, s.Range, s.Ammo,
+		s.WeaponType, s.TechType, s.DamageType, s.SoundType,
+		int(s.MinDelay), int(s.Factor))
 }

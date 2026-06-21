@@ -28,6 +28,10 @@ const launching      = ref(false)
 const launchError    = ref('')
 const isRestoring    = ref(false)
 
+// Запоминаем путь и выбранный мод раздельно для каждой игры.
+const perGamePath    = ref({})  // { 0: '...', 1: '...' }
+const perGameSelMod  = ref({})  // { 0: dataPath | null, 1: ... }
+
 const modsReady = computed(() => mods.value.length > 0)
 const canLaunch = computed(() =>
   selectedGame.value !== null && mods.value.length > 0 && selectedMod.value !== null && !launching.value
@@ -39,48 +43,66 @@ function saveConfig() {
 }
 
 watch(selectedMod, (mod) => {
-  if (isRestoring.value || !mod) return
-  saveConfig()
+  if (isRestoring.value) return
+  if (selectedGame.value !== null) {
+    perGameSelMod.value[selectedGame.value] = mod?.dataPath ?? null
+  }
+  if (!isRestoring.value && mod) saveConfig()
 })
 
 onMounted(async () => {
   const cfg = await LoadAppConfig()
-  if (cfg.game < 0 || !cfg.gamePath) return
+  if (cfg.game < 0) return
 
   isRestoring.value = true
+
+  // Восстанавливаем per-game пути.
+  if (cfg.gamePaths) perGamePath.value = cfg.gamePaths
+  if (cfg.selectedModPaths) perGameSelMod.value = cfg.selectedModPaths
+
   selectedGame.value = cfg.game
-  gamePath.value = cfg.gamePath
-  await validatePath()
+  gamePath.value = perGamePath.value[cfg.game] ?? ''
 
-  // Восстановить вручную добавленные моды.
-  if (cfg.manualMods && Object.keys(cfg.manualMods).length > 0) {
-    for (const [name, path] of Object.entries(cfg.manualMods)) {
-      try { await AddModPath(path, name) } catch { /* путь мог исчезнуть */ }
-    }
-    // Перестроить список модов после восстановления.
-    const baseDataPath = await GetBaseGameDataPath()
-    const modsMap = await GetMods()
-    const list = [{ name: 'Base game', dataPath: baseDataPath }]
-    for (const [n, dataPath] of Object.entries(modsMap)) {
-      list.push({ name: prettify(n), dataPath })
-    }
-    mods.value = list
-  }
+  if (gamePath.value) {
+    await validatePath()
 
-  if (cfg.selectedModPath && mods.value.length > 0) {
-    const found = mods.value.find(m => m.dataPath === cfg.selectedModPath)
-    if (found) selectedMod.value = found
+    // Восстанавливаем вручную добавленные моды для текущей игры.
+    const gameModsMap = cfg.manualMods?.[String(cfg.game)] ?? {}
+    if (Object.keys(gameModsMap).length > 0) {
+      for (const [name, path] of Object.entries(gameModsMap)) {
+        try { await AddModPath(cfg.game, path, name) } catch { /* путь мог исчезнуть */ }
+      }
+      const baseDataPath = await GetBaseGameDataPath()
+      const modsMap = await GetMods()
+      const list = [{ name: 'Base game', dataPath: baseDataPath }]
+      for (const [n, dataPath] of Object.entries(modsMap)) {
+        list.push({ name: prettify(n), dataPath })
+      }
+      mods.value = list
+    }
+
+    const savedMod = perGameSelMod.value[cfg.game]
+    if (savedMod && mods.value.length > 0) {
+      const found = mods.value.find(m => m.dataPath === savedMod)
+      if (found) selectedMod.value = found
+    }
   }
   isRestoring.value = false
 })
 
 function selectGame(game) {
   if (selectedGame.value === game.id) return
+  // Сохраняем текущий путь для предыдущей игры.
+  if (selectedGame.value !== null && gamePath.value) {
+    perGamePath.value[selectedGame.value] = gamePath.value
+  }
   selectedGame.value = game.id
-  gamePath.value = ''
   pathError.value = ''
   mods.value = []
   selectedMod.value = null
+  // Восстанавливаем путь для новой игры.
+  gamePath.value = perGamePath.value[game.id] ?? ''
+  if (gamePath.value) validatePath()
 }
 
 async function browse() {
@@ -120,7 +142,7 @@ async function browseAddMod() {
   if (!dir) return
   const name = dir.split(/[\\/]/).pop() || dir
   try {
-    await AddModPath(dir, name)
+    await AddModPath(selectedGame.value, dir, name)
     const baseDataPath = await GetBaseGameDataPath()
     const modsMap = await GetMods()
     const list = []

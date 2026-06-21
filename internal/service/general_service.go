@@ -102,6 +102,7 @@ func (s *GeneralService) InitGameFolder(game config.GameVersion, userPath string
 	s.gamePath = dataPath
 	s.game = game
 	s.versionsPath = filepath.Join(dataPath, "versions")
+	s.modsPath = make(map[string]string) // сбрасываем моды предыдущей игры
 
 	return nil
 }

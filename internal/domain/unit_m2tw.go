@@ -7,6 +7,7 @@ type M2TWUnit struct {
 	Category      string
 	Class         string
 	VoiceType     string
+	Accent        string
 	BannerFaction string
 	BannerHoly    string
 
@@ -38,7 +39,8 @@ type M2TWUnit struct {
 	ArmourUgModels string // raw: "NE_Bodyguard, NE_Bodyguard_ug1"
 
 	Ownership             []string
-	Eras                  map[int][]string // 0/1/2 → factions
+	Eras                  map[string][]string // "0"/"1"/"2" → factions
+	InfoPicDir            string
 	RecruitPriorityOffset int
 
 	IsDeleted  bool
@@ -65,7 +67,7 @@ func CopyM2TWUnit(u M2TWUnit) M2TWUnit {
 	u.StatSecAttr = copyStrings(u.StatSecAttr)
 	u.Ownership = copyStrings(u.Ownership)
 	if u.Eras != nil {
-		cp := make(map[int][]string, len(u.Eras))
+		cp := make(map[string][]string, len(u.Eras))
 		for k, v := range u.Eras {
 			cp[k] = copyStrings(v)
 		}

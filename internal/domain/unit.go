@@ -1,8 +1,9 @@
 package domain
 
 type Unit struct {
-	Type       string
-	Dictionary string
+	Type              string
+	Dictionary        string
+	DictionaryComment string // текст после ";" в строке dictionary, сохраняется as-is
 
 	Category  string
 	Class     string

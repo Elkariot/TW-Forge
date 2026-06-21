@@ -24,10 +24,15 @@ import (
 )
 
 type AppConfig struct {
-	Game            int               `json:"game"`
-	GamePath        string            `json:"gamePath"`
-	SelectedModPath string            `json:"selectedModPath"`
-	ManualMods      map[string]string `json:"manualMods,omitempty"`
+	Game             int                          `json:"game"`
+	// Per-game data (key = strconv.Itoa(config.GameVersion))
+	GamePaths        map[string]string            `json:"gamePaths,omitempty"`
+	SelectedModPaths map[string]string            `json:"selectedModPaths,omitempty"`
+	ManualMods       map[string]map[string]string `json:"manualMods,omitempty"`
+	// Legacy single-game fields (for backward compat with old config files)
+	LegacyGamePath   string                       `json:"gamePath,omitempty"`
+	LegacySelMod     string                       `json:"selectedModPath,omitempty"`
+	LegacyMods       map[string]string            `json:"legacyMods,omitempty"`
 }
 
 func appConfigPath() (string, error) {
@@ -63,14 +68,17 @@ func (a *App) SaveAppConfig(game int, gamePath, selectedModPath string) error {
 	if err != nil {
 		return err
 	}
-	// Preserve ManualMods from existing config.
-	existing := a.loadRawConfig()
-	cfg := AppConfig{
-		Game:            game,
-		GamePath:        gamePath,
-		SelectedModPath: selectedModPath,
-		ManualMods:      existing.ManualMods,
+	cfg := a.loadRawConfig()
+	cfg.Game = game
+	key := fmt.Sprintf("%d", game)
+	if cfg.GamePaths == nil {
+		cfg.GamePaths = make(map[string]string)
 	}
+	if cfg.SelectedModPaths == nil {
+		cfg.SelectedModPaths = make(map[string]string)
+	}
+	cfg.GamePaths[key] = gamePath
+	cfg.SelectedModPaths[key] = selectedModPath
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -89,6 +97,15 @@ func (a *App) loadRawConfig() AppConfig {
 	}
 	var cfg AppConfig
 	_ = json.Unmarshal(data, &cfg)
+	// Migrate legacy single-game fields into per-game maps.
+	if cfg.LegacyGamePath != "" && len(cfg.GamePaths) == 0 {
+		key := fmt.Sprintf("%d", cfg.Game)
+		cfg.GamePaths = map[string]string{key: cfg.LegacyGamePath}
+		cfg.SelectedModPaths = map[string]string{key: cfg.LegacySelMod}
+		if len(cfg.LegacyMods) > 0 {
+			cfg.ManualMods = map[string]map[string]string{key: cfg.LegacyMods}
+		}
+	}
 	return cfg
 }
 
@@ -142,8 +159,8 @@ func (a *App) GetBaseGameDataPath() string {
 	return a.generalService.GetGameSettings().GamePath
 }
 
-// AddModPath добавляет папку мода вручную (для RTW) и сохраняет в конфиг.
-func (a *App) AddModPath(modPath, name string) error {
+// AddModPath добавляет папку мода вручную и сохраняет в конфиг (per-game).
+func (a *App) AddModPath(game int, modPath, name string) error {
 	if err := a.generalService.AddModPath(modPath, name); err != nil {
 		return err
 	}
@@ -152,10 +169,14 @@ func (a *App) AddModPath(modPath, name string) error {
 		return nil // не критично
 	}
 	cfg := a.loadRawConfig()
+	key := fmt.Sprintf("%d", game)
 	if cfg.ManualMods == nil {
-		cfg.ManualMods = make(map[string]string)
+		cfg.ManualMods = make(map[string]map[string]string)
 	}
-	cfg.ManualMods[name] = modPath
+	if cfg.ManualMods[key] == nil {
+		cfg.ManualMods[key] = make(map[string]string)
+	}
+	cfg.ManualMods[key][name] = modPath
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil
@@ -171,8 +192,9 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 
 	// Определяем базовый путь к данным игры из конфига.
 	cfg := a.loadRawConfig()
-	if cfg.GamePath != "" {
-		baseData := filepath.Join(cfg.GamePath, "data")
+	key := fmt.Sprintf("%d", int(gameVersion))
+	if baseGamePath := cfg.GamePaths[key]; baseGamePath != "" {
+		baseData := filepath.Join(baseGamePath, "data")
 		if !strings.EqualFold(filepath.Clean(baseData), filepath.Clean(gamePath)) {
 			a.baseGameDataPath = baseData
 		} else {

@@ -330,9 +330,11 @@ async function removeFromBuilding(loc) {
             </label>
             <label>Голос
               <select v-model="edited.VoiceType" @change="markDirty">
+                <option v-if="edited.VoiceType && !VOICE_TYPES.includes(edited.VoiceType)" :value="edited.VoiceType">{{ edited.VoiceType }}</option>
                 <option v-for="v in VOICE_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
+            <label>Акцент<input v-model="edited.Accent" @input="markDirty" /></label>
             <label>Banner Faction<input v-model="edited.BannerFaction" @input="markDirty" /></label>
             <label>Banner Holy<input v-model="edited.BannerHoly" @input="markDirty" /></label>
             <label v-if="edited.Mount || edited.Category === 'cavalry'">Маунт<input v-model="edited.Mount" @input="markDirty" /></label>
@@ -593,6 +595,7 @@ async function removeFromBuilding(loc) {
           <h3>Найм</h3>
           <div class="grid">
             <label>Приоритет найма<input type="number" v-model.number="edited.RecruitPriorityOffset" @input="markDirty" /></label>
+            <label>info_pic_dir<input v-model="edited.InfoPicDir" @input="markDirty" /></label>
           </div>
         </section>
 
