@@ -40,7 +40,7 @@ func (w *GameWriter) SaveM2TWNamesDraft(data domain.M2TWGameData, changes map[st
 		}
 	}
 
-	return w.patchM2TWEnums(unitIndex, changes)
+	return w.writeM2TWEnums(unitIndex)
 }
 
 func (w *GameWriter) patchM2TWNames(srcPath, dstPath string, unitIndex map[string]domain.M2TWUnit, changes map[string]repository.ChangeType) error {
@@ -169,69 +169,29 @@ func (w *GameWriter) createM2TWNamesFromScratch(dstPath string, unitIndex map[st
 	return bw.Flush()
 }
 
-// patchM2TWEnums добавляет ключи новых юнитов в export_descr_unit_enums.txt,
-// если он существует. Если файла нет — пропускаем (M2TW может работать без него).
-func (w *GameWriter) patchM2TWEnums(unitIndex map[string]domain.M2TWUnit, changes map[string]repository.ChangeType) error {
+// writeM2TWEnums пересоздаёт export_descr_unit_enums.txt из ВСЕХ юнитов.
+// Если файла нет в папке игры — не создаём (мод не использует loose enums).
+// Если файл есть — генерируем заново: все существующие юниты + новые.
+// Это безопасно: .strings.bin кэш устаревает и M2TW пересоздаёт его при следующем запуске.
+func (w *GameWriter) writeM2TWEnums(unitIndex map[string]domain.M2TWUnit) error {
 	srcPath := filepath.Join(w.gamePath, "export_descr_unit_enums.txt")
 	if _, err := os.Stat(srcPath); err != nil {
-		return nil // файла нет — ок
+		return nil // мод без loose enums — не трогаем
 	}
 
 	dstPath := filepath.Join(w.draftPath, "export_descr_unit_enums.txt")
 
-	// Читаем существующие ключи чтобы не дублировать
-	existing := make(map[string]struct{})
-	loadExisting := func(path string) bool {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return false
-		}
-		for line := range strings.SplitSeq(string(data), "\n") {
-			existing[strings.TrimSpace(line)] = struct{}{}
-		}
-		return true
-	}
-	if !loadExisting(dstPath) {
-		loadExisting(srcPath)
-	}
-
-	// Собираем новые ключи
-	var newKeys []string
-	for unitType, ct := range changes {
-		if ct != repository.ChangeAdded {
-			continue
-		}
-		u, ok := unitIndex[unitType]
-		if !ok {
-			continue
-		}
-		for _, key := range []string{u.Dictionary, u.Dictionary + "_descr", u.Dictionary + "_descr_short"} {
-			if _, exists := existing[key]; !exists {
-				newKeys = append(newKeys, key)
-				existing[key] = struct{}{}
-			}
-		}
-	}
-	if len(newKeys) == 0 {
-		return nil
-	}
-
-	// Берём актуальную базу (draft если есть, иначе src)
-	basePath := srcPath
-	if _, err := os.Stat(dstPath); err == nil {
-		basePath = dstPath
-	}
-
-	base, err := os.ReadFile(basePath)
-	if err != nil {
-		return fmt.Errorf("read enums base: %w", err)
-	}
-
 	var sb strings.Builder
-	sb.WriteString(strings.TrimRight(string(base), "\r\n"))
-	for _, key := range newKeys {
+	for _, u := range unitIndex {
+		if u.IsDeleted {
+			continue
+		}
+		sb.WriteString(u.Dictionary)
 		sb.WriteByte('\n')
-		sb.WriteString(key)
+		sb.WriteString(u.Dictionary)
+		sb.WriteString("_descr\n")
+		sb.WriteString(u.Dictionary)
+		sb.WriteString("_descr_short\n")
 	}
 
 	return os.WriteFile(dstPath, []byte(sb.String()), 0644)
