@@ -92,10 +92,14 @@ func (s *GeneralService) InitGameFolder(game config.GameVersion, userPath string
 		return fmt.Errorf("can't find game data folder")
 	}
 
-	if ok, err := s.checkPath(filepath.Join(dataPath, s.targetFileName)); err != nil {
-		return err
-	} else if !ok {
-		return fmt.Errorf("can't find game data files")
+	// В M2TW файл EDU лежит только внутри модов (mods/<Mod>/data/), а не в корневом data/.
+	// Для M2TW достаточно проверить exe и папку data — EDU проверяется позже при выборе мода.
+	if game == config.Rome {
+		if ok, err := s.checkPath(filepath.Join(dataPath, s.targetFileName)); err != nil {
+			return err
+		} else if !ok {
+			return fmt.Errorf("can't find game data files")
+		}
 	}
 
 	s.gameRoot = userPath

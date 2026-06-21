@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
-// CopyUnitModelAssets добавляет texture-запись для dstFaction в descr_model_battle.txt
-// и копирует иконку юнита в папку новой фракции.
+// CopyUnitModelAssets добавляет texture и model_sprite записи для dstFaction
+// в descr_model_battle.txt и копирует иконку юнита в папку новой фракции.
 // Best-effort: частичные сбои не прерывают операцию.
 func (w *GameWriter) CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error {
 	if soldierModel == "" || srcFaction == "" || dstFaction == "" || srcFaction == dstFaction {
@@ -46,24 +47,36 @@ func (w *GameWriter) patchDescBattleModels(soldierModel, srcFaction, dstFaction 
 		return err
 	}
 
-	patched, changed := addFactionTextureLine(string(data), soldierModel, srcFaction, dstFaction)
+	patched, changed := addFactionModelEntries(string(data), soldierModel, srcFaction, dstFaction)
 	if !changed {
 		return nil
 	}
 	return os.WriteFile(draftPath, []byte(patched), 0644)
 }
 
-// addFactionTextureLine ищет блок `type soldierModel` и вставляет строку
-// `texture dstFaction, <path>` после последней существующей texture-строки.
-// Если запись для dstFaction уже есть или блок/путь не найден — unchanged=false.
-func addFactionTextureLine(content, soldierModel, srcFaction, dstFaction string) (string, bool) {
+// addFactionModelEntries ищет блок `type soldierModel` и вставляет:
+//   - `texture dstFaction, <path>` после последней texture-строки
+//   - `model_sprite dstFaction, <range>, <path>` после последней model_sprite-строки
+//
+// Разделитель между ключом и значением копируется из существующих строк (не хардкодится).
+// Если записи уже есть или блок не найден — unchanged=false.
+func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string) (string, bool) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	lines := strings.Split(content, "\n")
 
 	inTarget := false
+
+	// Texture
 	lastTextureLine := -1
 	texturePath := ""
-	hasDst := false
+	texSep := "\t\t\t\t" // fallback
+	hasDstTexture := false
+
+	// Model sprite
+	lastSpriteLine := -1
+	spriteTail := "" // "60.0, data/sprites/gauls_xxx.spr"
+	spriteSep := "\t" // fallback
+	hasDstSprite := false
 
 	for i, raw := range lines {
 		t := strings.TrimSpace(raw)
@@ -90,42 +103,98 @@ func addFactionTextureLine(content, soldierModel, srcFaction, dstFaction string)
 		}
 
 		if fields[0] == "texture" {
-			// Формат: texture   faction, path/to/texture.tga
+			// Формат: texture   faction, path
 			rest := t[len("texture"):]
-			commaIdx := strings.Index(rest, ",")
-			if commaIdx != -1 {
-				faction := strings.TrimSpace(rest[:commaIdx])
-				path := strings.TrimSpace(rest[commaIdx+1:])
+			if ci := strings.Index(rest, ","); ci != -1 {
+				faction := strings.TrimSpace(rest[:ci])
+				path := strings.TrimSpace(rest[ci+1:])
 				if strings.EqualFold(faction, srcFaction) && texturePath == "" {
 					texturePath = path
+					// Извлекаем реальный разделитель из необрезанной строки
+					rawAfter := raw[strings.Index(raw, "texture")+len("texture"):]
+					if s := leadingWhitespace(rawAfter); s != "" {
+						texSep = s
+					}
 				}
 				if strings.EqualFold(faction, dstFaction) {
-					hasDst = true
+					hasDstTexture = true
 				}
 			}
 			lastTextureLine = i
 		}
+
+		if fields[0] == "model_sprite" {
+			// Формат: model_sprite   faction, range, path
+			rest := t[len("model_sprite"):]
+			if ci := strings.Index(rest, ","); ci != -1 {
+				faction := strings.TrimSpace(rest[:ci])
+				tail := strings.TrimSpace(rest[ci+1:]) // "60.0, path"
+				if strings.EqualFold(faction, srcFaction) && spriteTail == "" {
+					spriteTail = tail
+					rawAfter := raw[strings.Index(raw, "model_sprite")+len("model_sprite"):]
+					if s := leadingWhitespace(rawAfter); s != "" {
+						spriteSep = s
+					}
+				}
+				if strings.EqualFold(faction, dstFaction) {
+					hasDstSprite = true
+				}
+			}
+			lastSpriteLine = i
+		}
 	}
 
-	if !inTarget || hasDst || texturePath == "" || lastTextureLine < 0 {
+	if !inTarget {
 		return content, false
 	}
 
-	// Сохраняем ведущие пробелы/табы исходной texture-строки
-	indent := leadingWhitespace(lines[lastTextureLine])
-	newLine := fmt.Sprintf("%stexture\t\t\t\t%s, %s", indent, dstFaction, texturePath)
+	type insertion struct {
+		afterLine int
+		newLine   string
+	}
+	var inserts []insertion
 
-	out := make([]string, 0, len(lines)+1)
-	out = append(out, lines[:lastTextureLine+1]...)
-	out = append(out, newLine)
-	out = append(out, lines[lastTextureLine+1:]...)
+	if !hasDstTexture && texturePath != "" && lastTextureLine >= 0 {
+		indent := leadingWhitespace(lines[lastTextureLine])
+		inserts = append(inserts, insertion{
+			lastTextureLine,
+			fmt.Sprintf("%stexture%s%s, %s", indent, texSep, dstFaction, texturePath),
+		})
+	}
+	if !hasDstSprite && spriteTail != "" && lastSpriteLine >= 0 {
+		indent := leadingWhitespace(lines[lastSpriteLine])
+		inserts = append(inserts, insertion{
+			lastSpriteLine,
+			fmt.Sprintf("%smodel_sprite%s%s, %s", indent, spriteSep, dstFaction, spriteTail),
+		})
+	}
+
+	if len(inserts) == 0 {
+		return content, false
+	}
+
+	// Вставки от конца к началу, чтобы не сбивать индексы
+	sort.Slice(inserts, func(i, j int) bool {
+		return inserts[i].afterLine > inserts[j].afterLine
+	})
+	for _, ins := range inserts {
+		lines = sliceInsertAfter(lines, ins.afterLine, ins.newLine)
+	}
 
 	// RTW требует CRLF
-	return strings.ReplaceAll(strings.Join(out, "\n"), "\n", "\r\n"), true
+	return strings.ReplaceAll(strings.Join(lines, "\n"), "\n", "\r\n"), true
+}
+
+func sliceInsertAfter(lines []string, idx int, newLine string) []string {
+	out := make([]string, 0, len(lines)+1)
+	out = append(out, lines[:idx+1]...)
+	out = append(out, newLine)
+	out = append(out, lines[idx+1:]...)
+	return out
 }
 
 func (w *GameWriter) copyUnitIcon(soldierModel, srcFaction, dstFaction string) error {
-	// RTW иконки: UI/units/[faction]/#[soldierModel].tga (имя может быть в любом регистре)
+	// RTW иконки: UI/units/[faction]/#[soldierModel].tga (регистр имени может быть разным)
 	variants := []string{
 		"#" + strings.ToLower(soldierModel) + ".tga",
 		"#" + strings.ToUpper(soldierModel) + ".tga",

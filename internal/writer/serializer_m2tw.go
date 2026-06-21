@@ -12,7 +12,11 @@ func serializeM2TWUnit(u domain.M2TWUnit) []string {
 	var lines []string
 
 	add := func(key, value string) {
-		lines = append(lines, fmt.Sprintf("%-17s%s", key, value))
+		if len(key) < 17 {
+			lines = append(lines, fmt.Sprintf("%-17s%s", key, value))
+		} else {
+			lines = append(lines, key+" "+value)
+		}
 	}
 
 	add("type", u.Type)

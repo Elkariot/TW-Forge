@@ -11,7 +11,11 @@ func serializeUnit(u domain.Unit) []string {
 	var lines []string
 
 	add := func(key, value string) {
-		lines = append(lines, fmt.Sprintf("%-17s%s", key, value))
+		if len(key) < 17 {
+			lines = append(lines, fmt.Sprintf("%-17s%s", key, value))
+		} else {
+			lines = append(lines, key+" "+value)
+		}
 	}
 
 	add("type", u.Type)

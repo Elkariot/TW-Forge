@@ -46,6 +46,23 @@ const activeTab = ref('units') // 'units' | 'buildings'
 const factions = ref([])
 const selectedFaction = ref(null)
 const unitGroups = ref({})
+const unitSearch = ref('')
+const filteredUnitGroups = computed(() => {
+  const q = unitSearch.value.trim().toLowerCase()
+  if (!q) return unitGroups.value
+  const result = {}
+  for (const [category, classes] of Object.entries(unitGroups.value)) {
+    const filteredClasses = {}
+    for (const [cls, units] of Object.entries(classes)) {
+      const matched = units.filter(u =>
+        (u.Name || '').toLowerCase().includes(q) || u.Type.toLowerCase().includes(q)
+      )
+      if (matched.length > 0) filteredClasses[cls] = matched
+    }
+    if (Object.keys(filteredClasses).length > 0) result[category] = filteredClasses
+  }
+  return result
+})
 const selectedUnitType = ref(null)
 const hasChanges = ref(false)
 const isApplied = ref(false)
@@ -58,6 +75,7 @@ const showCreateModal = ref(false)
 
 async function selectFaction(faction) {
   selectedFaction.value = faction.Name
+  unitSearch.value = ''
   unitGroups.value = isM2TW.value
     ? await GetM2TWUnitsByFaction(faction.Name)
     : await GetUnitsByFaction(faction.Name)
@@ -258,7 +276,19 @@ async function applyToGame() {
           >+</button>
         </div>
       </div>
-      <div v-for="(classes, category) in unitGroups" :key="category" class="category">
+      <div class="unit-search-wrap">
+        <input
+          v-model="unitSearch"
+          class="unit-search"
+          type="text"
+          placeholder="Поиск юнитов..."
+        />
+        <button v-if="unitSearch" class="unit-search-clear" @click="unitSearch = ''" title="Очистить">✕</button>
+      </div>
+      <div v-if="unitSearch && Object.keys(filteredUnitGroups).length === 0" class="unit-search-empty">
+        Ничего не найдено
+      </div>
+      <div v-for="(classes, category) in filteredUnitGroups" :key="category" class="category">
         <h3>{{ category }}</h3>
         <div v-for="(units, cls) in classes" :key="cls" class="class-group">
           <h4>{{ cls }}</h4>
@@ -472,9 +502,37 @@ body { font-family: sans-serif; background: var(--color-bg); color: var(--color-
   overflow-y: auto;
   border-right: 1px solid var(--color-border);
 }
-.unit-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.unit-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .unit-list-header h2 { font-size: 13px; color: var(--color-text-dim); margin-bottom: 0; }
 .unit-list-actions { display: flex; align-items: center; gap: 4px; }
+.unit-search-wrap { position: relative; margin-bottom: 10px; }
+.unit-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 24px 5px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 12px;
+  outline: none;
+}
+.unit-search:focus { border-color: var(--color-accent); }
+.unit-search-clear {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px;
+  line-height: 1;
+}
+.unit-search-clear:hover { color: var(--color-text); }
+.unit-search-empty { font-size: 12px; color: var(--color-text-dim); text-align: center; padding: 12px 0; }
 .unit-add-btn {
   background: none;
   border: 1px solid var(--color-border-soft);
