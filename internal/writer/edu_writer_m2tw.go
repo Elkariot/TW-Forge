@@ -42,6 +42,9 @@ func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes 
 	scanner := bufio.NewScanner(srcFile)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
+	// M2TW файлы используют CRLF; Scanner.Text() снимает \r.
+	writeLine := func(s string) { fmt.Fprintf(bw, "%s\r\n", s) }
+
 	state := eduStateCopy
 
 	for scanner.Scan() {
@@ -52,17 +55,17 @@ func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes 
 		case eduStateCopy:
 			unitType, isType := extractUnitType(trimmed)
 			if !isType {
-				fmt.Fprintln(bw, line)
+				writeLine(line)
 				continue
 			}
 			changeType, changed := changes[unitType]
 			if !changed {
-				fmt.Fprintln(bw, line)
+				writeLine(line)
 				continue
 			}
 			if changeType == repository.ChangeModified {
 				for _, l := range serializeM2TWUnit(unitIndex[unitType]) {
-					fmt.Fprintln(bw, l)
+					writeLine(l)
 				}
 			}
 			state = eduStateSkip
@@ -74,7 +77,7 @@ func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes 
 
 		case eduStateSkipTail:
 			if trimmed == "" {
-				fmt.Fprintln(bw, line)
+				writeLine(line)
 				state = eduStateCopy
 			}
 		}
@@ -93,10 +96,10 @@ func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes 
 		if !ok {
 			continue
 		}
-		fmt.Fprintln(bw, "")
-		fmt.Fprintln(bw, "")
+		writeLine("")
+		writeLine("")
 		for _, l := range serializeM2TWUnit(u) {
-			fmt.Fprintln(bw, l)
+			writeLine(l)
 		}
 	}
 

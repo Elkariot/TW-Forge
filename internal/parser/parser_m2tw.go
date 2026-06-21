@@ -174,7 +174,7 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 
 	var units []domain.M2TWUnit
 	var unit domain.M2TWUnit
-	isUnit := false
+	inUnit := false
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -196,12 +196,16 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 
 		switch keyword {
 		case "type":
+			// Финализируем предыдущий юнит перед началом нового.
+			if inUnit && unit.Type != "" {
+				units = append(units, unit)
+			}
 			unit = domain.M2TWUnit{Eras: make(map[string][]string)}
 			unit.Type = strings.Join(fields[1:], " ")
-			isUnit = true
+			inUnit = true
 
 		case "ownership":
-			if !isUnit {
+			if !inUnit {
 				continue
 			}
 			for _, f := range fields[1:] {
@@ -210,11 +214,10 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 					unit.Ownership = append(unit.Ownership, faction)
 				}
 			}
-			units = append(units, unit)
-			isUnit = false
+			// Не финализируем здесь — era/info_pic_dir/recruit_priority_offset идут после ownership.
 
 		default:
-			if !isUnit {
+			if !inUnit {
 				continue
 			}
 			switch keyword {
@@ -380,6 +383,10 @@ func (p *Parser) parseM2TWUnits() ([]domain.M2TWUnit, error) {
 				}
 			}
 		}
+	}
+	// Финализируем последний юнит в файле.
+	if inUnit && unit.Type != "" {
+		units = append(units, unit)
 	}
 	return units, scanner.Err()
 }

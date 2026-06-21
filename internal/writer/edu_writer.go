@@ -40,6 +40,9 @@ func (w *GameWriter) patchEDU(dst string, data domain.GameData, changes map[stri
 	scanner := bufio.NewScanner(srcFile)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
+	// RTW ожидает CRLF; Scanner.Text() снимает \r, поэтому пишем \r\n явно.
+	writeLine := func(s string) { fmt.Fprintf(bw, "%s\r\n", s) }
+
 	state := eduStateCopy
 
 	for scanner.Scan() {
@@ -50,17 +53,17 @@ func (w *GameWriter) patchEDU(dst string, data domain.GameData, changes map[stri
 		case eduStateCopy:
 			unitType, isType := extractUnitType(trimmed)
 			if !isType {
-				fmt.Fprintln(bw, line)
+				writeLine(line)
 				continue
 			}
 			changeType, changed := changes[unitType]
 			if !changed {
-				fmt.Fprintln(bw, line)
+				writeLine(line)
 				continue
 			}
 			if changeType == repository.ChangeModified {
 				for _, l := range serializeUnit(unitIndex[unitType]) {
-					fmt.Fprintln(bw, l)
+					writeLine(l)
 				}
 			}
 			// ChangeDeleted: ничего не пишем
@@ -73,7 +76,7 @@ func (w *GameWriter) patchEDU(dst string, data domain.GameData, changes map[stri
 
 		case eduStateSkipTail:
 			if trimmed == "" {
-				fmt.Fprintln(bw, line) // сохраняем пустую строку-разделитель
+				writeLine(line) // сохраняем пустую строку-разделитель
 				state = eduStateCopy
 			}
 		}
@@ -92,10 +95,10 @@ func (w *GameWriter) patchEDU(dst string, data domain.GameData, changes map[stri
 		if !ok {
 			continue
 		}
-		fmt.Fprintln(bw, "")
-		fmt.Fprintln(bw, "")
+		writeLine("")
+		writeLine("")
 		for _, l := range serializeUnit(u) {
-			fmt.Fprintln(bw, l)
+			writeLine(l)
 		}
 	}
 
