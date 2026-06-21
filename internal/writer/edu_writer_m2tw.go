@@ -14,7 +14,10 @@ func (w *GameWriter) SaveM2TWDraft(data domain.M2TWGameData, changes map[string]
 	if err := w.ensureInit(); err != nil {
 		return err
 	}
-	return w.patchM2TWEDU(filepath.Join(w.draftPath, "export_descr_unit.txt"), data, changes)
+	if err := w.patchM2TWEDU(filepath.Join(w.draftPath, "export_descr_unit.txt"), data, changes); err != nil {
+		return err
+	}
+	return w.SaveM2TWNamesDraft(data, changes)
 }
 
 func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes map[string]repository.ChangeType) error {

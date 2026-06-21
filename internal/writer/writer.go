@@ -51,8 +51,11 @@ func (w *GameWriter) Apply() error {
 	if err := w.applyFile("export_descr_unit.txt"); err != nil {
 		return err
 	}
-	if err := w.applyFile(filepath.Join("text", "export_units.txt")); err != nil {
-		return err
+	draftNames := filepath.Join(w.draftPath, "text", "export_units.txt")
+	if _, err := os.Stat(draftNames); err == nil {
+		if err := w.applyFile(filepath.Join("text", "export_units.txt")); err != nil {
+			return err
+		}
 	}
 	draftBuildings := filepath.Join(w.draftPath, "export_descr_buildings.txt")
 	if _, err := os.Stat(draftBuildings); err == nil {
@@ -92,10 +95,13 @@ func (w *GameWriter) backupOriginals() error {
 		if _, err := os.Stat(dst); err == nil {
 			continue // уже есть
 		}
+		src := filepath.Join(w.gamePath, filename)
+		if _, err := os.Stat(src); err != nil {
+			continue // файл не существует в данной версии игры
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 			return fmt.Errorf("mkdir backup dir for %s: %w", filename, err)
 		}
-		src := filepath.Join(w.gamePath, filename)
 		if err := copyFile(src, dst); err != nil {
 			return fmt.Errorf("backup %s: %w", filename, err)
 		}
