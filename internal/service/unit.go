@@ -15,6 +15,36 @@ func NewUnitService(repo repository.GameRepository) *UnitService {
 	return &UnitService{repo: repo}
 }
 
+// copyRecruitSlots копирует рекрут-слоты оригинального юнита во все здания,
+// добавляя новый слот для dstType с фракцией dstFaction.
+func (s *UnitService) copyRecruitSlots(srcType, dstType, dstFaction string) {
+	locs := s.repo.GetUnitBuildings(srcType)
+	for _, loc := range locs {
+		bg, ok := s.repo.GetBuildingByName(loc.GroupName)
+		if !ok {
+			continue
+		}
+		for _, lvl := range bg.Levels {
+			if lvl.Name != loc.LevelName {
+				continue
+			}
+			for _, slot := range lvl.RecruitSlots {
+				if slot.UnitType != srcType {
+					continue
+				}
+				newSlots := append(lvl.RecruitSlots, domain.RecruitSlot{
+					UnitType:     dstType,
+					Level:        slot.Level,
+					Requirements: []string{dstFaction},
+					Conditions:   slot.Conditions,
+				})
+				_ = s.repo.UpdateBuildingLevel(loc.GroupName, loc.LevelName, newSlots)
+				break
+			}
+		}
+	}
+}
+
 func (s *UnitService) GetAllUnits() []domain.Unit {
 	return s.repo.GetAllUnits()
 }
@@ -116,7 +146,14 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 	// Копируем иконку и добавляем texture-запись в descr_model_battle.txt
 	_ = s.repo.CopyUnitModelAssets(soldierModel, srcFaction, faction)
 
-	return newUnitType, s.repo.SaveDraft()
+	// Добавляем юнит в те же здания что и оригинал (с фракцией dst)
+	s.copyRecruitSlots(unitType, newUnitType, faction)
+
+	if err := s.repo.SaveDraft(); err != nil {
+		return "", err
+	}
+	_ = s.repo.SaveBuildingsDraft()
+	return newUnitType, nil
 }
 
 func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
