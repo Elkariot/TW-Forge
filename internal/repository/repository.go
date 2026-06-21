@@ -54,12 +54,16 @@ type GameRepository interface {
 	GetChanges() map[string]ChangeType
 	SaveDraft() error
 	Save() error
+
+	// Model assets (RTW)
+	CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error
 }
 
 type Writer interface {
 	SaveDraft(data domain.GameData, changes map[string]ChangeType) error
 	SaveBuildingsDraft(data domain.GameData) error
 	Apply() error
+	CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error
 }
 
 type InMemoryRepository struct {
@@ -119,4 +123,11 @@ func (r *InMemoryRepository) Save() error {
 	}
 	r.buildingsDirty = false
 	return nil
+}
+
+func (r *InMemoryRepository) CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.CopyUnitModelAssets(soldierModel, srcFaction, dstFaction)
 }

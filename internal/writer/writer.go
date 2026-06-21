@@ -69,6 +69,15 @@ func (w *GameWriter) Apply() error {
 			return err
 		}
 	}
+	draftBattleText := filepath.Join(w.draftPath, "descr_model_battle.txt")
+	if _, err := os.Stat(draftBattleText); err == nil {
+		if err := w.applyFile("descr_model_battle.txt"); err != nil {
+			return err
+		}
+	}
+	if err := w.applyDirRecursive("UI"); err != nil {
+		return err
+	}
 	return nil
 }
 

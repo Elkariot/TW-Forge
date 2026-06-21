@@ -89,6 +89,13 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 		return "", fmt.Errorf("unit not found")
 	}
 
+	// Запоминаем исходную фракцию до изменения ownership
+	srcFaction := ""
+	if len(unit.Ownership) > 0 {
+		srcFaction = unit.Ownership[0]
+	}
+	soldierModel := unit.Soldier.Model
+
 	base := fmt.Sprintf("%s copy", unit.Type)
 	newUnitType := base
 	for i := 2; ; i++ {
@@ -106,6 +113,9 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 		return "", fmt.Errorf("error copying unit: %w", err)
 	}
 
+	// Копируем иконку и добавляем texture-запись в descr_model_battle.txt
+	_ = s.repo.CopyUnitModelAssets(soldierModel, srcFaction, faction)
+
 	return newUnitType, s.repo.SaveDraft()
 }
 
@@ -117,12 +127,22 @@ func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
 	if !ok {
 		return fmt.Errorf("шаблон %q не найден", templateType)
 	}
+
+	srcFaction := ""
+	if len(unit.Ownership) > 0 {
+		srcFaction = unit.Ownership[0]
+	}
+	soldierModel := unit.Soldier.Model
+
 	unit.Type = newType
 	unit.Dictionary = strings.ReplaceAll(newType, " ", "_")
 	unit.Ownership = []string{faction}
 	if err := s.repo.AddUnit(unit); err != nil {
 		return fmt.Errorf("ошибка создания юнита: %w", err)
 	}
+
+	_ = s.repo.CopyUnitModelAssets(soldierModel, srcFaction, faction)
+
 	return s.repo.SaveDraft()
 }
 

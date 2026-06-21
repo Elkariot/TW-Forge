@@ -43,6 +43,9 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 	scanner := bufio.NewScanner(srcFile)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
+	// RTW ожидает CRLF; Scanner.Text() снимает \r.
+	writeLine := func(s string) { fmt.Fprintf(bw, "%s\r\n", s) }
+
 	depth := 0
 	currentGroup := ""
 	currentLevel := ""
@@ -66,7 +69,7 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 			if depth == 3 {
 				depWritten = false
 			}
-			fmt.Fprintln(bw, line)
+			writeLine(line)
 
 			if depth == 4 {
 				if inCapability {
@@ -75,17 +78,17 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 					k := key{currentGroup, currentLevel}
 					lvl := levelIndex[k]
 					for _, bonus := range lvl.BonusLines {
-						fmt.Fprintln(bw, capIndent+bonus)
+						writeLine(capIndent + bonus)
 					}
 					for _, slot := range lvl.RecruitSlots {
-						fmt.Fprintln(bw, capIndent+formatBuildingSlot(slot))
+						writeLine(capIndent + formatBuildingSlot(slot))
 					}
 				} else if inUpgrades {
 					inUpgradeBlock = true
 					inUpgrades = false
 					k := key{currentGroup, currentLevel}
 					for _, upg := range levelIndex[k].Upgrades {
-						fmt.Fprintln(bw, upgradeIndent+upg)
+						writeLine(upgradeIndent + upg)
 					}
 				}
 			}
@@ -100,16 +103,15 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 					inUpgradeBlock = false
 				}
 			} else if depth == 3 && !depWritten && currentGroup != "" && currentLevel != "" {
-				// Inject dependency before closing level block if not yet written
 				k := key{currentGroup, currentLevel}
 				if lvl, ok := levelIndex[k]; ok && lvl.Dependency != nil && lvl.Dependency.Group != "" {
 					indent := leadingWhitespace(line) + "\t"
-					fmt.Fprintln(bw, indent+"building_present_min_level "+lvl.Dependency.Group+" "+lvl.Dependency.Level)
+					writeLine(indent + "building_present_min_level " + lvl.Dependency.Group + " " + lvl.Dependency.Level)
 				}
 				depWritten = true
 			}
 			depth--
-			fmt.Fprintln(bw, line)
+			writeLine(line)
 			continue
 		}
 
@@ -138,9 +140,9 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 				indent := leadingWhitespace(line)
 				k := key{currentGroup, lvlName}
 				if lvl, ok := levelIndex[k]; ok {
-					fmt.Fprintln(bw, indent+formatLevelDefinition(lvlName, lvl))
+					writeLine(indent + formatLevelDefinition(lvlName, lvl))
 				} else {
-					fmt.Fprintln(bw, line)
+					writeLine(line)
 				}
 				continue
 			}
@@ -155,14 +157,14 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 			if len(fields) >= 1 {
 				switch fields[0] {
 				case "construction":
-					fmt.Fprintln(bw, indent+"construction\t"+strconv.Itoa(lvl.Construction))
+					writeLine(indent + "construction\t" + strconv.Itoa(lvl.Construction))
 					continue
 				case "cost":
-					fmt.Fprintln(bw, indent+"cost\t"+strconv.Itoa(lvl.Cost))
+					writeLine(indent + "cost\t" + strconv.Itoa(lvl.Cost))
 					continue
 				case "settlement_min":
 					if lvl.SettlementMin != "" {
-						fmt.Fprintln(bw, indent+"settlement_min "+lvl.SettlementMin)
+						writeLine(indent + "settlement_min " + lvl.SettlementMin)
 					}
 					continue
 				case "building_present_min_level":
@@ -171,7 +173,7 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 				case "capability", "upgrades":
 					if !depWritten {
 						if lvl.Dependency != nil && lvl.Dependency.Group != "" {
-							fmt.Fprintln(bw, indent+"building_present_min_level "+lvl.Dependency.Group+" "+lvl.Dependency.Level)
+							writeLine(indent + "building_present_min_level " + lvl.Dependency.Group + " " + lvl.Dependency.Level)
 						}
 						depWritten = true
 					}
@@ -179,7 +181,7 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 			}
 		}
 
-		fmt.Fprintln(bw, line)
+		writeLine(line)
 
 		if trimmed == "" || strings.HasPrefix(trimmed, ";") {
 			continue

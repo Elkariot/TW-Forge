@@ -48,6 +48,7 @@ const selectedFaction = ref(null)
 const unitGroups = ref({})
 const selectedUnitType = ref(null)
 const hasChanges = ref(false)
+const isApplied = ref(false)
 const applying = ref(false)
 const applyError = ref(null)
 const showDeleted = ref(false)
@@ -84,9 +85,10 @@ async function checkChanges() {
   hasChanges.value = isM2TW.value ? await M2TWHasUnsavedChanges() : await HasUnsavedChanges()
 }
 
-async function onUnitSaved() { await checkChanges() }
+async function onUnitSaved() { isApplied.value = false; await checkChanges() }
 
 async function onUnitDeleted() {
+  isApplied.value = false
   if (selectedFaction.value) {
     unitGroups.value = isM2TW.value
       ? await GetM2TWUnitsByFaction(selectedFaction.value)
@@ -100,6 +102,7 @@ async function onUnitDeleted() {
 }
 
 async function onUnitRestored() {
+  isApplied.value = false
   if (selectedFaction.value) {
     unitGroups.value = isM2TW.value
       ? await GetM2TWUnitsByFaction(selectedFaction.value)
@@ -113,6 +116,7 @@ async function onUnitRestored() {
 }
 
 async function onUnitCreated(newType) {
+  isApplied.value = false
   showCreateModal.value = false
   if (selectedFaction.value) {
     unitGroups.value = isM2TW.value
@@ -145,6 +149,7 @@ async function confirmCopy() {
         ? await GetM2TWUnitsByFaction(selectedFaction.value)
         : await GetUnitsByFaction(selectedFaction.value)
     }
+    isApplied.value = false
     selectedUnitType.value = newType
     await checkChanges()
   } catch (e) {
@@ -158,6 +163,7 @@ async function applyToGame() {
   try {
     isM2TW.value ? await SaveM2TW() : await Save()
     await checkChanges()
+    isApplied.value = true
   } catch (e) {
     applyError.value = String(e)
   } finally {
@@ -184,8 +190,13 @@ async function applyToGame() {
       <div class="topbar-actions">
         <ThemePicker />
         <span v-if="applyError" class="topbar-error">{{ applyError }}</span>
-        <button class="btn-apply" :disabled="applying || !hasChanges" @click="applyToGame">
-          {{ applying ? 'Запись...' : 'Применить к игре' }}
+        <button
+          class="btn-apply"
+          :class="{ 'btn-apply--done': isApplied && hasChanges }"
+          :disabled="applying || !hasChanges"
+          @click="applyToGame"
+        >
+          {{ applying ? 'Запись...' : isApplied ? '✓ Применено' : 'Применить к игре' }}
         </button>
       </div>
     </div>
@@ -400,6 +411,8 @@ body { font-family: sans-serif; background: var(--color-bg); color: var(--color-
 }
 .btn-apply:hover { background: var(--color-primary-hover); }
 .btn-apply:disabled { opacity: 0.5; cursor: default; }
+.btn-apply--done { background: #4a9e6b; border-color: #3d8a5c; }
+.btn-apply--done:hover { background: #3d8a5c; }
 
 .below-topbar { display: flex; flex: 1; overflow: hidden; }
 
