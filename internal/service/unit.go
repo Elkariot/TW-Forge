@@ -146,13 +146,9 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 	// Копируем иконку и добавляем texture-запись в descr_model_battle.txt
 	_ = s.repo.CopyUnitModelAssets(soldierModel, srcFaction, faction)
 
-	// Добавляем юнит в те же здания что и оригинал (с фракцией dst)
-	s.copyRecruitSlots(unitType, newUnitType, faction)
-
 	if err := s.repo.SaveDraft(); err != nil {
 		return "", err
 	}
-	_ = s.repo.SaveBuildingsDraft()
 	return newUnitType, nil
 }
 

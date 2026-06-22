@@ -193,31 +193,81 @@ func sliceInsertAfter(lines []string, idx int, newLine string) []string {
 	return out
 }
 
-func (w *GameWriter) copyUnitIcon(soldierModel, srcFaction, dstFaction string) error {
-	// RTW иконки: UI/units/[faction]/#[soldierModel].tga (регистр имени может быть разным)
+// findUnitIcon ищет файл иконки юнита (#soldierModel.tga) в папке unitsDir.
+// Сначала ищет в подпапке srcFaction, затем перебирает все остальные подпапки.
+// Возвращает полный путь и имя файла, либо пустые строки если не найдено.
+func findUnitIcon(unitsDir, soldierModel, srcFaction string) (fullPath, fileName string) {
 	variants := []string{
+		"#" + soldierModel + ".tga",
 		"#" + strings.ToLower(soldierModel) + ".tga",
 		"#" + strings.ToUpper(soldierModel) + ".tga",
 	}
 
-	var srcIconPath, iconName string
-	for _, name := range variants {
-		p := filepath.Join(w.gamePath, "UI", "units", srcFaction, name)
-		if _, err := os.Stat(p); err == nil {
-			srcIconPath = p
-			iconName = name
-			break
+	tryDir := func(dir string) (string, string) {
+		for _, name := range variants {
+			p := filepath.Join(dir, name)
+			if _, err := os.Stat(p); err == nil {
+				return p, name
+			}
 		}
-	}
-	if srcIconPath == "" {
-		return nil // иконки нет — best-effort
+		return "", ""
 	}
 
+	// Сначала в папке исходной фракции
+	if p, n := tryDir(filepath.Join(unitsDir, srcFaction)); p != "" {
+		return p, n
+	}
+
+	// Fallback: ищем в остальных подпапках (на случай несовпадения имени папки или шаренных иконок)
+	entries, err := os.ReadDir(unitsDir)
+	if err != nil {
+		return "", ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.EqualFold(e.Name(), srcFaction) {
+			continue
+		}
+		if p, n := tryDir(filepath.Join(unitsDir, e.Name())); p != "" {
+			return p, n
+		}
+	}
+	return "", ""
+}
+
+func (w *GameWriter) copyUnitIcon(soldierModel, srcFaction, dstFaction string) error {
+	unitsDir := filepath.Join(w.gamePath, "UI", "units")
+	srcPath, iconName := findUnitIcon(unitsDir, soldierModel, srcFaction)
+	if srcPath == "" {
+		return nil // иконки нет — best-effort
+	}
 	dstDir := filepath.Join(w.draftPath, "UI", "units", dstFaction)
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}
-	return copyFile(srcIconPath, filepath.Join(dstDir, iconName))
+	return copyFile(srcPath, filepath.Join(dstDir, iconName))
+}
+
+// CopyUnitCardDraft копирует unit card (ui/units/[srcFaction]/#[soldierModel].tga)
+// из папки исходной фракции в папку целевой фракции в черновик.
+// Если иконка не найдена в папке srcFaction, ищет во всех остальных подпапках units/.
+// Best-effort: частичные сбои не прерывают операцию.
+func (w *GameWriter) CopyUnitCardDraft(soldierModel, srcFaction, dstFaction string) error {
+	if soldierModel == "" || srcFaction == "" || dstFaction == "" || srcFaction == dstFaction {
+		return nil
+	}
+	if err := w.ensureInit(); err != nil {
+		return err
+	}
+	unitsDir := filepath.Join(w.gamePath, "ui", "units")
+	srcPath, iconName := findUnitIcon(unitsDir, soldierModel, srcFaction)
+	if srcPath == "" {
+		return nil
+	}
+	dstDir := filepath.Join(w.draftPath, "ui", "units", dstFaction)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
+	return copyFile(srcPath, filepath.Join(dstDir, iconName))
 }
 
 // applyDirRecursive копирует всё содержимое draft/[relDir]/ → game/[relDir]/.

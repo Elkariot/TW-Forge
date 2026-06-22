@@ -72,6 +72,12 @@ func (s *M2TWUnitService) CopyUnit(unitType, faction string) (string, error) {
 		newUnitType = fmt.Sprintf("%s %d", base, i)
 	}
 
+	srcFaction := ""
+	if len(unit.Ownership) > 0 {
+		srcFaction = unit.Ownership[0]
+	}
+	soldierModel := unit.Soldier.Model
+
 	unit.Type = newUnitType
 	unit.Dictionary = strings.ReplaceAll(newUnitType, " ", "_")
 	unit.Ownership = []string{faction}
@@ -85,6 +91,8 @@ func (s *M2TWUnitService) CopyUnit(unitType, faction string) (string, error) {
 
 	// Copy battle model entry — best-effort, не все юниты имеют запись в modeldb.
 	_ = s.repo.CopyBattleModel(unitType, newUnitType)
+	// Copy unit card icon: ui/units/[srcFaction]/#[soldierModel].tga → ui/units/[dstFaction]/
+	_ = s.repo.CopyUnitCard(soldierModel, srcFaction, faction)
 
 	return newUnitType, s.repo.SaveDraft()
 }

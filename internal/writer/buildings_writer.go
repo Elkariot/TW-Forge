@@ -53,12 +53,11 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 	inCapability := false
 	inCapBlock := false
 	capIndent := "\t\t\t\t"
+	writtenCapSlots := map[string]bool{} // unitType → уже записан из оригинала
 
 	inUpgrades := false
 	inUpgradeBlock := false
 	upgradeIndent := "\t\t\t\t"
-
-	depWritten := false // tracking whether we wrote building_present_min_level for current level
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -66,23 +65,13 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 
 		if trimmed == "{" {
 			depth++
-			if depth == 3 {
-				depWritten = false
-			}
 			writeLine(line)
 
 			if depth == 4 {
 				if inCapability {
 					inCapBlock = true
 					inCapability = false
-					k := key{currentGroup, currentLevel}
-					lvl := levelIndex[k]
-					for _, bonus := range lvl.BonusLines {
-						writeLine(capIndent + bonus)
-					}
-					for _, slot := range lvl.RecruitSlots {
-						writeLine(capIndent + formatBuildingSlot(slot))
-					}
+					writtenCapSlots = map[string]bool{}
 				} else if inUpgrades {
 					inUpgradeBlock = true
 					inUpgrades = false
@@ -98,37 +87,62 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 		if trimmed == "}" {
 			if depth == 4 {
 				if inCapBlock {
+					// Дописываем новые слоты, которых не было в оригинале
+					k := key{currentGroup, currentLevel}
+					for _, slot := range levelIndex[k].RecruitSlots {
+						if !writtenCapSlots[slot.UnitType] {
+							writeLine(capIndent + formatBuildingSlot(slot))
+						}
+					}
 					inCapBlock = false
 				} else if inUpgradeBlock {
 					inUpgradeBlock = false
 				}
-			} else if depth == 3 && !depWritten && currentGroup != "" && currentLevel != "" {
-				k := key{currentGroup, currentLevel}
-				if lvl, ok := levelIndex[k]; ok && lvl.Dependency != nil && lvl.Dependency.Group != "" {
-					indent := leadingWhitespace(line) + "\t"
-					writeLine(indent + "building_present_min_level " + lvl.Dependency.Group + " " + lvl.Dependency.Level)
-				}
-				depWritten = true
 			}
 			depth--
 			writeLine(line)
 			continue
 		}
 
-		// Пропускаем всё содержимое capability-блока и upgrades-блока.
-		if trimmed != "" && !strings.HasPrefix(trimmed, ";") {
-			if inCapBlock {
-				if lead := leadingWhitespace(line); lead != "" {
-					capIndent = lead
-				}
+		// Обрабатываем содержимое capability-блока построчно.
+		if inCapBlock {
+			if lead := leadingWhitespace(line); lead != "" {
+				capIndent = lead
+			}
+			if trimmed == "" || strings.HasPrefix(trimmed, ";") {
+				writeLine(line)
 				continue
 			}
-			if inUpgradeBlock {
+			fields := strings.Fields(trimmed)
+			if len(fields) > 0 && fields[0] == "recruit" {
+				// Обновляем или удаляем слот вербовки
+				unitType := extractRecruitType(trimmed)
+				k := key{currentGroup, currentLevel}
+				found := false
+				for _, slot := range levelIndex[k].RecruitSlots {
+					if slot.UnitType == unitType {
+						writeLine(capIndent + formatBuildingSlot(slot))
+						writtenCapSlots[unitType] = true
+						found = true
+						break
+					}
+				}
+				_ = found // если не найден — слот удалён, пропускаем
+			} else {
+				// Не recruit-строка (law_bonus, happiness_bonus и т.п.) — сохраняем как есть
+				writeLine(line)
+			}
+			continue
+		}
+
+		// Пропускаем содержимое upgrades-блока (переписываем из памяти).
+		if inUpgradeBlock {
+			if trimmed != "" && !strings.HasPrefix(trimmed, ";") {
 				if lead := leadingWhitespace(line); lead != "" {
 					upgradeIndent = lead
 				}
-				continue
 			}
+			continue
 		}
 
 		// Заменяем строку определения уровня (depth 2).
@@ -168,15 +182,8 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 					}
 					continue
 				case "building_present_min_level":
-					// Always skip original; will inject updated value before capability/upgrades/}
+					// Skip: dependency is now written inline on the level definition line.
 					continue
-				case "capability", "upgrades":
-					if !depWritten {
-						if lvl.Dependency != nil && lvl.Dependency.Group != "" {
-							writeLine(indent + "building_present_min_level " + lvl.Dependency.Group + " " + lvl.Dependency.Level)
-						}
-						depWritten = true
-					}
 				}
 			}
 		}
@@ -236,6 +243,12 @@ func formatLevelDefinition(name string, lvl domain.BuildingLevel) string {
 		}
 		sb.WriteString("}")
 	}
+	if lvl.Dependency != nil && lvl.Dependency.Group != "" {
+		sb.WriteString(" and building_present_min_level ")
+		sb.WriteString(lvl.Dependency.Group)
+		sb.WriteString(" ")
+		sb.WriteString(lvl.Dependency.Level)
+	}
 	return sb.String()
 }
 
@@ -262,4 +275,17 @@ func formatBuildingSlot(slot domain.RecruitSlot) string {
 
 func leadingWhitespace(s string) string {
 	return s[:len(s)-len(strings.TrimLeft(s, " \t"))]
+}
+
+// extractRecruitType извлекает тип юнита из строки recruit "unit_type" ...
+func extractRecruitType(line string) string {
+	start := strings.Index(line, `"`)
+	if start == -1 {
+		return ""
+	}
+	end := strings.Index(line[start+1:], `"`)
+	if end == -1 {
+		return ""
+	}
+	return line[start+1 : start+1+end]
 }

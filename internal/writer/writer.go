@@ -78,6 +78,10 @@ func (w *GameWriter) Apply() error {
 	if err := w.applyDirRecursive("UI"); err != nil {
 		return err
 	}
+	// M2TW использует нижний регистр для папки ui/units/
+	if err := w.applyDirRecursive("ui"); err != nil {
+		return err
+	}
 	return nil
 }
 
