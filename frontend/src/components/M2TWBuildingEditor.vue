@@ -20,6 +20,10 @@ const saving = ref(false)
 const error = ref(null)
 const search = ref('')
 
+const bonusItems = ref([])
+const newBonus = ref('')
+const showTemplates = ref(false)
+
 const SETTLEMENT_OPTIONS = [
   { value: '', label: '— нет ограничения —' },
   { value: 'village', label: 'Деревня (village)' },
@@ -37,11 +41,11 @@ const SETTLEMENT_TYPE_OPTIONS = [
 ]
 
 const M2TW_BONUS_TEMPLATES = [
-  { cat: 'Население',  items: ['happiness_bonus bonus 1', 'law_bonus bonus 1', 'population_health_bonus bonus 1', 'population_growth_bonus bonus 1'] },
-  { cat: 'Экономика',  items: ['trade_base_income_bonus bonus 1', 'farming_level bonus 1', 'farming_level 1', 'trade_fleet 1', 'mine_resource iron'] },
-  { cat: 'Войска',     items: ['recruits_exp_bonus bonus 1', 'recruits_morale_bonus bonus 1', 'armour bonus 1', 'weapon_simple bonus 1', 'weapon_bladed bonus 1', 'weapon_missile bonus 1', 'upgrade_bodyguard 1', 'siege_engineer', 'shipwright'] },
-  { cat: 'Укрепления', items: ['wall_level 1', 'gate_strength 1', 'gate_defences 1', 'tower_level 1'] },
-  { cat: 'Дороги',     items: ['road_level 1', 'paved_roads', 'highways'] },
+  { cat: 'Население',  items: ['happiness_bonus bonus ', 'law_bonus bonus ', 'population_health_bonus bonus ', 'population_growth_bonus bonus '] },
+  { cat: 'Экономика',  items: ['trade_base_income_bonus bonus ', 'farming_level bonus ', 'farming_level ', 'trade_fleet ', 'mine_resource '] },
+  { cat: 'Войска',     items: ['recruits_exp_bonus bonus ', 'recruits_morale_bonus bonus ', 'recruitment_slots ', 'armour bonus ', 'weapon_simple bonus ', 'weapon_bladed bonus ', 'weapon_missile bonus ', 'upgrade_bodyguard ', 'siege_engineer', 'shipwright'] },
+  { cat: 'Укрепления', items: ['wall_level ', 'gate_strength ', 'gate_defences ', 'tower_level '] },
+  { cat: 'Дороги',     items: ['road_level ', 'paved_roads', 'highways'] },
   { cat: 'Агенты',     items: ['agent spy 0 requires factions { }', 'agent diplomat 0 requires factions { }', 'agent assassin 0 requires factions { }'] },
 ]
 
@@ -67,7 +71,7 @@ function levelMatchesFaction(level) {
 
 function levelMatchesSettlement(level) {
   if (settlementFilter.value === 'all') return true
-  if (!level.SettlementType) return true // no restriction → show in both
+  if (!level.SettlementType) return true
   return level.SettlementType === settlementFilter.value
 }
 
@@ -102,11 +106,35 @@ function selectLevel(grp, lvl) {
   if (!edited.value.BonusLines) edited.value.BonusLines = []
   if (!edited.value.Upgrades) edited.value.Upgrades = []
   if (!edited.value.RequiredCultures) edited.value.RequiredCultures = []
+  bonusItems.value = bonusesFromLevel(lvl)
+  newBonus.value = ''
+  showTemplates.value = false
   localDirty.value = false
   error.value = null
 }
 
 function markDirty() { localDirty.value = true }
+
+// ── Bonus lines ──
+function bonusesFromLevel(level) {
+  return (level.BonusLines || []).map(line => ({ text: line, original: line }))
+}
+function isNewBonus(item) { return item.original === null }
+function isModifiedBonus(item) { return item.original !== null && item.text !== item.original }
+function revertBonus(item) { item.text = item.original; markDirty() }
+function removeBonus(i) { bonusItems.value.splice(i, 1); markDirty() }
+function addBonus() {
+  const v = newBonus.value.trim()
+  if (!v) return
+  bonusItems.value.push({ text: v, original: null })
+  newBonus.value = ''
+  markDirty()
+}
+function useTemplate(tpl) {
+  newBonus.value = tpl
+  showTemplates.value = false
+  if (!tpl.endsWith(' ')) addBonus()
+}
 
 // ── Pool editing ──
 function addPool() {
@@ -130,22 +158,6 @@ function addPoolFaction(poolIdx, name) {
 }
 function removePoolFaction(poolIdx, name) {
   edited.value.RecruitPools[poolIdx].Factions = edited.value.RecruitPools[poolIdx].Factions.filter(f => f !== name)
-  markDirty()
-}
-
-// ── Bonus lines ──
-function addBonusLine(template) {
-  edited.value.BonusLines = [...(edited.value.BonusLines ?? []), template.trim()]
-  markDirty()
-}
-function removeBonusLine(idx) {
-  edited.value.BonusLines = edited.value.BonusLines.filter((_, i) => i !== idx)
-  markDirty()
-}
-function setBonusLine(idx, val) {
-  const arr = [...edited.value.BonusLines]
-  arr[idx] = val
-  edited.value.BonusLines = arr
   markDirty()
 }
 
@@ -181,6 +193,7 @@ async function save() {
   saving.value = true
   error.value = null
   try {
+    const bonusLines = bonusItems.value.map(b => b.text)
     await UpdateM2TWBuildingLevelProps(
       selectedGroup.value.Name,
       selectedLevel.value.Name,
@@ -198,7 +211,7 @@ async function save() {
       selectedGroup.value.Name,
       selectedLevel.value.Name,
       edited.value.RecruitPools ?? [],
-      edited.value.BonusLines ?? [],
+      bonusLines,
     )
     // Update local model
     const grp = buildings.value.find(g => g.Name === selectedGroup.value.Name)
@@ -207,6 +220,7 @@ async function save() {
       if (idx !== -1) grp.Levels[idx] = JSON.parse(JSON.stringify(edited.value))
     }
     selectedLevel.value = JSON.parse(JSON.stringify(edited.value))
+    bonusItems.value.forEach(b => { b.original = b.text })
     localDirty.value = false
     emit('changed')
   } catch (e) {
@@ -224,6 +238,8 @@ async function revertAll() {
     selectedGroup.value = null
     selectedLevel.value = null
     edited.value = null
+    bonusItems.value = []
+    newBonus.value = ''
     localDirty.value = false
     emit('changed')
   } catch (e) {
@@ -291,7 +307,7 @@ async function revertAll() {
         <div class="bld-detail-actions">
           <span v-if="error" class="bld-error">{{ error }}</span>
           <button v-if="localDirty" class="btn-save" :disabled="saving" @click="save">{{ saving ? '...' : 'Сохранить' }}</button>
-          <button v-if="localDirty" class="btn-cancel" @click="edited = JSON.parse(JSON.stringify(selectedLevel)); localDirty = false">Отмена</button>
+          <button v-if="localDirty" class="btn-cancel" @click="edited = JSON.parse(JSON.stringify(selectedLevel)); bonusItems = bonusesFromLevel(selectedLevel); localDirty = false">Отмена</button>
           <button class="btn-revert-all" @click="revertAll" title="Откатить все здания">↺</button>
         </div>
       </div>
@@ -387,18 +403,32 @@ async function revertAll() {
 
         <!-- Бонусы (capability) -->
         <section class="bld-section">
-          <div class="section-header-row">
-            <h3>Бонусы (capability)</h3>
+          <h3>Бонусы (capability)</h3>
+
+          <div class="be-bonus-list">
+            <div v-if="bonusItems.length === 0" class="bld-empty">Нет бонусов</div>
+            <div v-for="(item, i) in bonusItems" :key="i" class="be-bonus-row">
+              <div class="be-bonus-tag" :class="{ 'is-new': isNewBonus(item), 'is-modified': isModifiedBonus(item) }">
+                {{ isNewBonus(item) ? 'new' : isModifiedBonus(item) ? 'изм' : '' }}
+              </div>
+              <input :value="item.text" class="be-bonus-input" @input="e => { item.text = e.target.value; markDirty() }" />
+              <button v-if="isModifiedBonus(item)" class="be-bonus-action revert" @click="revertBonus(item)" title="Откатить к оригиналу">↺</button>
+              <button class="be-bonus-action remove" @click="removeBonus(i)" title="Удалить">✕</button>
+            </div>
           </div>
-          <div v-for="(line, idx) in edited.BonusLines" :key="idx" class="bonus-row">
-            <input class="bonus-input" :value="line" @input="e => setBonusLine(idx, e.target.value)" />
-            <button class="bonus-remove" @click="removeBonusLine(idx)">✕</button>
-          </div>
-          <div class="bonus-templates">
-            <div v-for="cat in M2TW_BONUS_TEMPLATES" :key="cat.cat" class="bonus-cat">
-              <div class="bonus-cat-label">{{ cat.cat }}</div>
-              <div class="bonus-cat-items">
-                <button v-for="t in cat.items" :key="t" class="bonus-tpl" @click="addBonusLine(t)">{{ t.trim() }}</button>
+
+          <div class="be-bonus-add-area">
+            <div class="be-upg-input-row">
+              <input v-model="newBonus" class="be-bonus-new-input" placeholder="happiness_bonus bonus 3" @keydown.enter="addBonus" />
+              <button class="be-upg-add-btn" @click="addBonus">+</button>
+              <button class="be-tpl-toggle" :class="{ active: showTemplates }" @click="showTemplates = !showTemplates" title="Шаблоны">≡</button>
+            </div>
+            <div v-if="showTemplates" class="be-templates">
+              <div v-for="cat in M2TW_BONUS_TEMPLATES" :key="cat.cat" class="be-tpl-cat">
+                <div class="be-tpl-cat-name">{{ cat.cat }}</div>
+                <div class="be-tpl-items">
+                  <button v-for="tpl in cat.items" :key="tpl" class="be-tpl-item" @click="useTemplate(tpl)">{{ tpl.trim() }}</button>
+                </div>
               </div>
             </div>
           </div>
@@ -554,18 +584,56 @@ label select option { background: var(--color-cell); }
 .pool-cond:focus { outline: none; border-color: var(--color-accent); }
 
 /* Bonus lines */
-.bonus-row { display: flex; gap: 4px; margin-bottom: 4px; }
-.bonus-input { flex: 1; background: var(--color-cell); border: 1px solid var(--color-border); border-radius: 3px; color: var(--color-text-dim); font-size: 12px; padding: 4px 7px; font-family: monospace; }
-.bonus-input:focus { outline: none; border-color: var(--color-accent); }
-.bonus-remove { background: var(--color-primary); border: 1px solid var(--color-primary-hover); color: var(--color-text); border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer; }
-.bonus-remove:hover { background: var(--color-primary-hover); }
-.bonus-templates { margin-top: 10px; border-top: 1px solid var(--color-border); padding-top: 8px; }
-.bonus-cat { margin-bottom: 8px; }
-.bonus-cat-label { font-size: 9px; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: 0.05em; margin-bottom: 4px; }
-.bonus-cat-items { display: flex; flex-wrap: wrap; gap: 4px; }
-.bonus-tpl {
-  background: var(--color-input-bg); border: 1px solid var(--color-border); border-radius: 3px;
-  color: var(--color-text-muted); font-size: 10px; padding: 2px 7px; cursor: pointer; font-family: monospace;
+.be-bonus-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.be-bonus-row { display: flex; align-items: center; gap: 5px; }
+.be-bonus-tag {
+  width: 28px; flex-shrink: 0; font-size: 9px; text-align: center;
+  border-radius: 3px; padding: 1px 3px; color: transparent; background: transparent;
 }
-.bonus-tpl:hover { border-color: var(--color-border-soft); color: var(--color-text-dim); }
+.be-bonus-tag.is-new { color: #3aba80; background: rgba(58,186,128,0.2); border: 1px solid rgba(58,186,128,0.3); }
+.be-bonus-tag.is-modified { color: #e9a000; background: rgba(233,160,0,0.1); border: 1px solid rgba(233,160,0,0.3); }
+.be-bonus-input {
+  flex: 1; background: var(--color-input-bg); border: 1px solid var(--color-border-soft);
+  border-radius: 4px; color: var(--color-text); font-size: 12px; padding: 5px 8px; font-family: monospace;
+}
+.be-bonus-input:focus { outline: none; border-color: var(--color-accent); }
+.be-bonus-action {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  font-size: 12px; padding: 2px 4px; border-radius: 3px; line-height: 1;
+}
+.be-bonus-action.revert { color: #e9a000; }
+.be-bonus-action.revert:hover { color: #ffc000; background: rgba(233,160,0,0.1); }
+.be-bonus-action.remove { color: var(--color-text-muted); }
+.be-bonus-action.remove:hover { color: var(--color-accent); background: rgba(149,232,225,0.2); }
+
+/* Bonus add + templates */
+.be-bonus-add-area { display: flex; flex-direction: column; gap: 8px; }
+.be-upg-input-row { display: flex; gap: 6px; }
+.be-bonus-new-input {
+  flex: 1; background: var(--color-input-bg); border: 1px solid var(--color-border-soft);
+  border-radius: 4px; color: var(--color-text); font-size: 12px; padding: 5px 8px; font-family: monospace;
+}
+.be-bonus-new-input:focus { outline: none; border-color: var(--color-accent); }
+.be-upg-add-btn {
+  background: var(--color-primary); border: 1px solid var(--color-primary-hover);
+  border-radius: 4px; color: var(--color-text); font-size: 14px; width: 28px; cursor: pointer;
+}
+.be-upg-add-btn:hover { background: var(--color-primary-hover); }
+.be-tpl-toggle {
+  background: var(--color-cell); border: 1px solid var(--color-border-soft);
+  border-radius: 4px; color: var(--color-text-dim); font-size: 14px; width: 28px; cursor: pointer;
+}
+.be-tpl-toggle:hover, .be-tpl-toggle.active { border-color: var(--color-accent); color: var(--color-accent); }
+.be-templates {
+  background: var(--color-input-bg); border: 1px solid var(--color-border-soft);
+  border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 10px;
+  max-height: 220px; overflow-y: auto;
+}
+.be-tpl-cat-name { font-size: 10px; text-transform: uppercase; color: var(--color-heading); letter-spacing: 0.06em; margin-bottom: 5px; }
+.be-tpl-items { display: flex; flex-wrap: wrap; gap: 4px; }
+.be-tpl-item {
+  background: var(--color-cell); border: 1px solid var(--color-border-soft); border-radius: 3px;
+  color: var(--color-text-dim); font-size: 11px; font-family: monospace; padding: 3px 7px; cursor: pointer; white-space: nowrap;
+}
+.be-tpl-item:hover { border-color: var(--color-accent); color: var(--color-text); }
 </style>
