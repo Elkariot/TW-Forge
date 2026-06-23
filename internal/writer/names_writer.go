@@ -38,7 +38,7 @@ func (w *GameWriter) patchNames(dst string, data domain.GameData, changes map[st
 	unitIndex := buildUnitIndex(data.Units)
 	byDict := buildDictIndex(unitIndex, changes)
 
-	srcFile, err := os.Open(filepath.Join(w.gamePath, "text", "export_units.txt"))
+	srcFile, err := os.Open(filepath.Join(w.backupPath, "text", "export_units.txt"))
 	if err != nil {
 		return fmt.Errorf("open source export_units: %w", err)
 	}

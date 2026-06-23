@@ -21,7 +21,7 @@ func (w *GameWriter) SaveM2TWDraft(data domain.M2TWGameData, changes map[string]
 }
 
 func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes map[string]repository.ChangeType) error {
-	srcFile, err := os.Open(filepath.Join(w.gamePath, "export_descr_unit.txt"))
+	srcFile, err := os.Open(filepath.Join(w.backupPath, "export_descr_unit.txt"))
 	if err != nil {
 		return fmt.Errorf("open source M2TW EDU: %w", err)
 	}

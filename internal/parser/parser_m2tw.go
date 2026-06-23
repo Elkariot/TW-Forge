@@ -449,6 +449,7 @@ func (p *Parser) parseM2TWBuildings() ([]domain.M2TWBuildingGroup, []string, err
 					SettlementType:   pendingLevelType,
 					RequiredCultures: pendingLevelFactions,
 					Dependency:       pendingDependency,
+					DependencyInline: pendingDependency != nil,
 					ConvertTo:        pendingConvertTo,
 				}
 				pendingLevelName = ""

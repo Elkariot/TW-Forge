@@ -28,7 +28,7 @@ func (w *GameWriter) SaveM2TWNamesDraft(data domain.M2TWGameData, changes map[st
 		return fmt.Errorf("mkdir for M2TW names draft: %w", err)
 	}
 
-	srcPath := filepath.Join(w.gamePath, "text", "export_units.txt")
+	srcPath := filepath.Join(w.backupPath, "text", "export_units.txt")
 	if _, err := os.Stat(srcPath); err != nil {
 		// Нет loose-файла — создаём с нуля только с нашими изменениями.
 		if err2 := w.createM2TWNamesFromScratch(dstPath, unitIndex, changes); err2 != nil {
@@ -40,7 +40,7 @@ func (w *GameWriter) SaveM2TWNamesDraft(data domain.M2TWGameData, changes map[st
 		}
 	}
 
-	return w.writeM2TWEnums(unitIndex)
+	return w.writeM2TWEnums(unitIndex, changes)
 }
 
 func (w *GameWriter) patchM2TWNames(srcPath, dstPath string, unitIndex map[string]domain.M2TWUnit, changes map[string]repository.ChangeType) error {
@@ -169,32 +169,72 @@ func (w *GameWriter) createM2TWNamesFromScratch(dstPath string, unitIndex map[st
 	return bw.Flush()
 }
 
-// writeM2TWEnums пересоздаёт export_descr_unit_enums.txt из ВСЕХ юнитов.
-// Если файла нет в папке игры — не создаём (мод не использует loose enums).
-// Если файл есть — генерируем заново: все существующие юниты + новые.
-// Это безопасно: .strings.bin кэш устаревает и M2TW пересоздаёт его при следующем запуске.
-func (w *GameWriter) writeM2TWEnums(unitIndex map[string]domain.M2TWUnit) error {
-	srcPath := filepath.Join(w.gamePath, "export_descr_unit_enums.txt")
+// writeM2TWEnums патчит export_descr_unit_enums.txt: убирает удалённые записи, добавляет новые.
+// Если файла нет в папке игры — не трогаем (мод без loose enums).
+func (w *GameWriter) writeM2TWEnums(unitIndex map[string]domain.M2TWUnit, changes map[string]repository.ChangeType) error {
+	srcPath := filepath.Join(w.backupPath, "export_descr_unit_enums.txt")
 	if _, err := os.Stat(srcPath); err != nil {
-		return nil // мод без loose enums — не трогаем
+		// Fallback: check game path in case backup doesn't have it yet
+		srcPath = filepath.Join(w.gamePath, "export_descr_unit_enums.txt")
+		if _, err2 := os.Stat(srcPath); err2 != nil {
+			return nil
+		}
 	}
 
 	dstPath := filepath.Join(w.draftPath, "export_descr_unit_enums.txt")
 
-	var sb strings.Builder
-	for _, u := range unitIndex {
-		if u.IsDeleted {
-			continue
-		}
-		sb.WriteString(u.Dictionary)
-		sb.WriteByte('\n')
-		sb.WriteString(u.Dictionary)
-		sb.WriteString("_descr\n")
-		sb.WriteString(u.Dictionary)
-		sb.WriteString("_descr_short\n")
+	raw, err := os.ReadFile(srcPath)
+	if err != nil {
+		return err
 	}
 
-	return os.WriteFile(dstPath, []byte(sb.String()), 0644)
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	// Trim trailing empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	// Build set of existing entries for dedup check
+	existing := make(map[string]bool, len(lines))
+	for _, l := range lines {
+		existing[strings.ToLower(strings.TrimSpace(l))] = true
+	}
+
+	// Entries to remove (ChangeDeleted — dictionary derived from unit type)
+	toRemove := make(map[string]bool)
+	for unitType, ct := range changes {
+		if ct == repository.ChangeDeleted {
+			dict := strings.ReplaceAll(unitType, " ", "_")
+			toRemove[strings.ToLower(dict)] = true
+			toRemove[strings.ToLower(dict+"_descr")] = true
+			toRemove[strings.ToLower(dict+"_descr_short")] = true
+		}
+	}
+
+	kept := lines[:0]
+	for _, l := range lines {
+		if !toRemove[strings.ToLower(strings.TrimSpace(l))] {
+			kept = append(kept, l)
+		}
+	}
+
+	// Append new entries (ChangeAdded only, skip if already present)
+	for unitType, ct := range changes {
+		if ct != repository.ChangeAdded {
+			continue
+		}
+		u, ok := unitIndex[unitType]
+		if !ok || u.IsDeleted {
+			continue
+		}
+		if !existing[strings.ToLower(u.Dictionary)] {
+			kept = append(kept, u.Dictionary)
+			kept = append(kept, u.Dictionary+"_descr")
+			kept = append(kept, u.Dictionary+"_descr_short")
+		}
+	}
+
+	return os.WriteFile(dstPath, []byte(strings.Join(kept, "\r\n")+"\r\n"), 0644)
 }
 
 func writeM2TWUnitEntry(writeLine func(string), u domain.M2TWUnit) {

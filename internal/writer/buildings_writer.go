@@ -19,7 +19,7 @@ func (w *GameWriter) SaveBuildingsDraft(data domain.GameData) error {
 }
 
 func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
-	srcFile, err := os.Open(filepath.Join(w.gamePath, "export_descr_buildings.txt"))
+	srcFile, err := os.Open(filepath.Join(w.backupPath, "export_descr_buildings.txt"))
 	if err != nil {
 		return fmt.Errorf("open buildings: %w", err)
 	}
@@ -72,6 +72,11 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 					inCapBlock = true
 					inCapability = false
 					writtenCapSlots = map[string]bool{}
+					// Write bonus lines from memory before processing recruit lines.
+					k := key{currentGroup, currentLevel}
+					for _, bonus := range levelIndex[k].BonusLines {
+						writeLine(capIndent + bonus)
+					}
 				} else if inUpgrades {
 					inUpgradeBlock = true
 					inUpgrades = false
@@ -129,8 +134,8 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 				}
 				_ = found // если не найден — слот удалён, пропускаем
 			} else {
-				// Не recruit-строка (law_bonus, happiness_bonus и т.п.) — сохраняем как есть
-				writeLine(line)
+				// Не recruit-строка (law_bonus, happiness_bonus и т.п.) —
+				// бонусы уже записаны из памяти при открытии блока, пропускаем оригинал.
 			}
 			continue
 		}

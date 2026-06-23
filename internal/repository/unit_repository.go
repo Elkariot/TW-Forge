@@ -2,8 +2,9 @@ package repository
 
 import (
 	"fmt"
-	"tw-forge/internal/domain"
 	"slices"
+	"strings"
+	"tw-forge/internal/domain"
 )
 
 func (r *InMemoryRepository) GetAllUnits() []domain.Unit {
@@ -91,21 +92,89 @@ func (r *InMemoryRepository) UpdateUnit(originalType string, unit domain.Unit) e
 	return fmt.Errorf("unit %q not found", originalType)
 }
 
-func (r *InMemoryRepository) DeleteUnit(unitType string) error {
+func (r *InMemoryRepository) DeleteUnit(unitType, faction string) error {
 	for i, u := range r.working.Units {
 		if u.Type != unitType {
 			continue
 		}
-		// Если юнит только что создан — убираем полностью (он не попадёт в файл).
-		if r.changes[unitType] == ChangeAdded {
-			r.working.Units = slices.Delete(r.working.Units, i, i+1)
-			delete(r.changes, unitType)
-			r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
-			return nil
+
+		// Remove faction from ownership
+		newOwnership := make([]string, 0, len(u.Ownership))
+		for _, f := range u.Ownership {
+			if f != faction {
+				newOwnership = append(newOwnership, f)
+			}
 		}
-		// Мягкое удаление: очищаем фракции, убираем из зданий, ставим флаг.
-		r.working.Units[i].Ownership = nil
-		r.working.Units[i].IsDeleted = true
+
+		// Remove unit from buildings for this specific faction
+		for gi := range r.working.Buildings {
+			for li := range r.working.Buildings[gi].Levels {
+				lvl := &r.working.Buildings[gi].Levels[li]
+				var keep []domain.RecruitSlot
+				for _, s := range lvl.RecruitSlots {
+					if s.UnitType == unitType && slices.Contains(s.Requirements, faction) {
+						continue
+					}
+					keep = append(keep, s)
+				}
+				lvl.RecruitSlots = keep
+			}
+		}
+
+		// Check if any non-slave factions remain
+		hasRealFaction := false
+		for _, f := range newOwnership {
+			if strings.ToLower(f) != "slave" {
+				hasRealFaction = true
+				break
+			}
+		}
+
+		if !hasRealFaction {
+			// Full soft delete: clear ownership, mark deleted, purge from all remaining buildings
+			r.working.Units[i].Ownership = nil
+			r.working.Units[i].IsDeleted = true
+			for gi := range r.working.Buildings {
+				for li := range r.working.Buildings[gi].Levels {
+					lvl := &r.working.Buildings[gi].Levels[li]
+					var keep []domain.RecruitSlot
+					for _, s := range lvl.RecruitSlots {
+						if s.UnitType != unitType {
+							keep = append(keep, s)
+						}
+					}
+					lvl.RecruitSlots = keep
+				}
+			}
+			if r.changes[unitType] == ChangeAdded {
+				r.working.Units = slices.Delete(r.working.Units, i, i+1)
+				delete(r.changes, unitType)
+				r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
+				r.buildingsDirty = true
+				return nil
+			}
+			r.changes[unitType] = ChangeModified
+		} else {
+			r.working.Units[i].Ownership = newOwnership
+			if r.changes[unitType] != ChangeAdded {
+				r.changes[unitType] = ChangeModified
+			}
+		}
+
+		r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
+		r.buildingsDirty = true
+		return nil
+	}
+	return fmt.Errorf("unit %q not found", unitType)
+}
+
+func (r *InMemoryRepository) HardDeleteUnit(unitType string) error {
+	for i, u := range r.working.Units {
+		if u.Type != unitType {
+			continue
+		}
+		_ = u
+		buildingsChanged := false
 		for gi := range r.working.Buildings {
 			for li := range r.working.Buildings[gi].Levels {
 				lvl := &r.working.Buildings[gi].Levels[li]
@@ -113,14 +182,23 @@ func (r *InMemoryRepository) DeleteUnit(unitType string) error {
 				for _, s := range lvl.RecruitSlots {
 					if s.UnitType != unitType {
 						keep = append(keep, s)
+					} else {
+						buildingsChanged = true
 					}
 				}
 				lvl.RecruitSlots = keep
 			}
 		}
-		r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
-		r.buildingsDirty = true
-		r.changes[unitType] = ChangeModified
+		r.working.Units = slices.Delete(r.working.Units, i, i+1)
+		if r.changes[unitType] == ChangeAdded {
+			delete(r.changes, unitType)
+		} else {
+			r.changes[unitType] = ChangeDeleted
+		}
+		if buildingsChanged {
+			r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
+			r.buildingsDirty = true
+		}
 		return nil
 	}
 	return fmt.Errorf("unit %q not found", unitType)

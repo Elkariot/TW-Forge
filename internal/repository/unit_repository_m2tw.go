@@ -2,8 +2,9 @@ package repository
 
 import (
 	"fmt"
-	"tw-forge/internal/domain"
 	"slices"
+	"strings"
+	"tw-forge/internal/domain"
 )
 
 func (r *InMemoryM2TWRepository) GetAllUnits() []domain.M2TWUnit {
@@ -77,20 +78,114 @@ func (r *InMemoryM2TWRepository) UpdateUnit(originalType string, unit domain.M2T
 	return fmt.Errorf("unit %q not found", originalType)
 }
 
-func (r *InMemoryM2TWRepository) DeleteUnit(unitType string) error {
+func (r *InMemoryM2TWRepository) DeleteUnit(unitType, faction string) error {
 	for i, u := range r.working.Units {
 		if u.Type != unitType {
 			continue
 		}
-		if r.changes[unitType] == ChangeAdded {
-			r.working.Units = slices.Delete(r.working.Units, i, i+1)
-			delete(r.changes, unitType)
-			r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
-			return nil
+
+		// Remove faction from ownership
+		newOwnership := make([]string, 0, len(u.Ownership))
+		for _, f := range u.Ownership {
+			if f != faction {
+				newOwnership = append(newOwnership, f)
+			}
 		}
-		r.working.Units[i].Ownership = nil
-		r.working.Units[i].Eras = nil
-		r.working.Units[i].IsDeleted = true
+
+		// Remove unit from buildings for this specific faction
+		for gi := range r.working.Buildings {
+			for li := range r.working.Buildings[gi].Levels {
+				lvl := &r.working.Buildings[gi].Levels[li]
+				var keep []domain.M2TWRecruitPool
+				for _, p := range lvl.RecruitPools {
+					if p.UnitType != unitType || !slices.Contains(p.Factions, faction) {
+						keep = append(keep, p)
+						continue
+					}
+					newFactions := slices.DeleteFunc(slices.Clone(p.Factions), func(f string) bool {
+						return f == faction
+					})
+					if len(newFactions) == 0 {
+						continue // drop pool entirely
+					}
+					p.Factions = newFactions
+					keep = append(keep, p)
+				}
+				lvl.RecruitPools = keep
+			}
+		}
+
+		// Remove faction from Eras map
+		newEras := make(map[string][]string)
+		for era, factions := range u.Eras {
+			var ef []string
+			for _, f := range factions {
+				if f != faction {
+					ef = append(ef, f)
+				}
+			}
+			if len(ef) > 0 {
+				newEras[era] = ef
+			}
+		}
+
+		// Check if any non-slave factions remain
+		hasRealFaction := false
+		for _, f := range newOwnership {
+			if strings.ToLower(f) != "slave" {
+				hasRealFaction = true
+				break
+			}
+		}
+
+		if !hasRealFaction {
+			r.working.Units[i].Ownership = nil
+			r.working.Units[i].Eras = nil
+			r.working.Units[i].IsDeleted = true
+			// Purge from all remaining buildings
+			for gi := range r.working.Buildings {
+				for li := range r.working.Buildings[gi].Levels {
+					lvl := &r.working.Buildings[gi].Levels[li]
+					var keep []domain.M2TWRecruitPool
+					for _, p := range lvl.RecruitPools {
+						if p.UnitType != unitType {
+							keep = append(keep, p)
+						}
+					}
+					lvl.RecruitPools = keep
+				}
+			}
+			if r.changes[unitType] == ChangeAdded {
+				r.working.Units = slices.Delete(r.working.Units, i, i+1)
+				delete(r.changes, unitType)
+				r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
+				r.buildingsDirty = true
+				return nil
+			}
+			r.changes[unitType] = ChangeModified
+		} else {
+			r.working.Units[i].Ownership = newOwnership
+			r.working.Units[i].Eras = newEras
+			if r.changes[unitType] != ChangeAdded {
+				r.changes[unitType] = ChangeModified
+			}
+		}
+
+		r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
+		r.buildingsDirty = true
+		return nil
+	}
+	return fmt.Errorf("unit %q not found", unitType)
+}
+
+func (r *InMemoryM2TWRepository) HardDeleteUnit(unitType string) error {
+	for i, u := range r.working.Units {
+		if u.Type != unitType {
+			continue
+		}
+		_ = u
+		// Remove from all buildings
+		buildingsChanged := false
 		for gi := range r.working.Buildings {
 			for li := range r.working.Buildings[gi].Levels {
 				lvl := &r.working.Buildings[gi].Levels[li]
@@ -98,14 +193,23 @@ func (r *InMemoryM2TWRepository) DeleteUnit(unitType string) error {
 				for _, p := range lvl.RecruitPools {
 					if p.UnitType != unitType {
 						keep = append(keep, p)
+					} else {
+						buildingsChanged = true
 					}
 				}
 				lvl.RecruitPools = keep
 			}
 		}
-		r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
-		r.buildingsDirty = true
-		r.changes[unitType] = ChangeModified
+		r.working.Units = slices.Delete(r.working.Units, i, i+1)
+		if r.changes[unitType] == ChangeAdded {
+			delete(r.changes, unitType)
+		} else {
+			r.changes[unitType] = ChangeDeleted
+		}
+		if buildingsChanged {
+			r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
+			r.buildingsDirty = true
+		}
 		return nil
 	}
 	return fmt.Errorf("unit %q not found", unitType)

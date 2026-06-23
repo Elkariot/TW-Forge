@@ -86,6 +86,9 @@ func (s *UnitService) Update(originalType string, unit domain.Unit) error {
 	if err := s.repo.UpdateUnit(originalType, unit); err != nil {
 		return err
 	}
+	if originalType != unit.Type && len(unit.Ownership) > 0 {
+		_ = s.repo.RenameUnitIcon(originalType, unit.Type, unit.Ownership[0])
+	}
 	return s.repo.SaveDraft()
 }
 
@@ -100,11 +103,25 @@ func (s *UnitService) Create(unit domain.Unit) error {
 	return s.repo.SaveDraft()
 }
 
-func (s *UnitService) Delete(unitType string) error {
+func (s *UnitService) Delete(unitType, faction string) error {
 	if _, exists := s.repo.GetUnitByType(unitType); !exists {
 		return fmt.Errorf("unit type not found: %s", unitType)
 	}
-	if err := s.repo.DeleteUnit(unitType); err != nil {
+	if err := s.repo.DeleteUnit(unitType, faction); err != nil {
+		return err
+	}
+	if err := s.repo.SaveDraft(); err != nil {
+		return err
+	}
+	return s.repo.SaveBuildingsDraft()
+}
+
+func (s *UnitService) HardDelete(unitType string) error {
+	if _, exists := s.repo.GetUnitByType(unitType); !exists {
+		return fmt.Errorf("unit type not found: %s", unitType)
+	}
+	_ = s.repo.DeleteUnitAssets(unitType)
+	if err := s.repo.HardDeleteUnit(unitType); err != nil {
 		return err
 	}
 	if err := s.repo.SaveDraft(); err != nil {
@@ -143,8 +160,8 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 		return "", fmt.Errorf("error copying unit: %w", err)
 	}
 
-	// Копируем иконку и добавляем texture-запись в descr_model_battle.txt
-	_ = s.repo.CopyUnitModelAssets(soldierModel, srcFaction, faction)
+	// Копируем иконку (по типу юнита) и добавляем texture-запись в descr_model_battle.txt
+	_ = s.repo.CopyUnitModelAssets(soldierModel, unitType, newUnitType, srcFaction, faction)
 
 	if err := s.repo.SaveDraft(); err != nil {
 		return "", err
@@ -174,7 +191,7 @@ func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
 		return fmt.Errorf("ошибка создания юнита: %w", err)
 	}
 
-	_ = s.repo.CopyUnitModelAssets(soldierModel, srcFaction, faction)
+	_ = s.repo.CopyUnitModelAssets(soldierModel, templateType, newType, srcFaction, faction)
 
 	return s.repo.SaveDraft()
 }

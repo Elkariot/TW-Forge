@@ -372,8 +372,8 @@ async function applyToGame() {
     <BuildingEditor v-else-if="activeTab === 'buildings'" class="tab-fill" @changed="onUnitSaved" />
 
     <!-- Вкладка: Найм -->
-    <M2TWRecruitEditor v-else-if="activeTab === 'recruit' && isM2TW" class="tab-fill" />
-    <RecruitEditor v-else-if="activeTab === 'recruit'" />
+    <M2TWRecruitEditor v-else-if="activeTab === 'recruit' && isM2TW" class="tab-fill" @changed="onUnitSaved" />
+    <RecruitEditor v-else-if="activeTab === 'recruit'" class="tab-fill" @changed="onUnitSaved" />
 
     </div> <!-- below-topbar -->
   </div>

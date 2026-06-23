@@ -37,11 +37,11 @@ const SETTLEMENT_TYPE_OPTIONS = [
 ]
 
 const M2TW_BONUS_TEMPLATES = [
-  { cat: 'Население',  items: ['happiness_bonus bonus ', 'law_bonus bonus ', 'population_health_bonus bonus ', 'population_growth_bonus bonus '] },
-  { cat: 'Экономика',  items: ['trade_base_income_bonus bonus ', 'farming_level bonus ', 'farming_level ', 'trade_fleet ', 'mine_resource '] },
-  { cat: 'Войска',     items: ['recruits_exp_bonus bonus ', 'recruits_morale_bonus bonus ', 'armour bonus ', 'weapon_simple bonus ', 'weapon_bladed bonus ', 'weapon_missile bonus ', 'upgrade_bodyguard ', 'siege_engineer', 'shipwright'] },
-  { cat: 'Укрепления', items: ['wall_level ', 'gate_strength ', 'gate_defences ', 'tower_level '] },
-  { cat: 'Дороги',     items: ['road_level ', 'paved_roads', 'highways'] },
+  { cat: 'Население',  items: ['happiness_bonus bonus 1', 'law_bonus bonus 1', 'population_health_bonus bonus 1', 'population_growth_bonus bonus 1'] },
+  { cat: 'Экономика',  items: ['trade_base_income_bonus bonus 1', 'farming_level bonus 1', 'farming_level 1', 'trade_fleet 1', 'mine_resource iron'] },
+  { cat: 'Войска',     items: ['recruits_exp_bonus bonus 1', 'recruits_morale_bonus bonus 1', 'armour bonus 1', 'weapon_simple bonus 1', 'weapon_bladed bonus 1', 'weapon_missile bonus 1', 'upgrade_bodyguard 1', 'siege_engineer', 'shipwright'] },
+  { cat: 'Укрепления', items: ['wall_level 1', 'gate_strength 1', 'gate_defences 1', 'tower_level 1'] },
+  { cat: 'Дороги',     items: ['road_level 1', 'paved_roads', 'highways'] },
   { cat: 'Агенты',     items: ['agent spy 0 requires factions { }', 'agent diplomat 0 requires factions { }', 'agent assassin 0 requires factions { }'] },
 ]
 

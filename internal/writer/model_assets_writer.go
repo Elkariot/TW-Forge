@@ -8,10 +8,9 @@ import (
 	"strings"
 )
 
-// CopyUnitModelAssets добавляет texture и model_sprite записи для dstFaction
-// в descr_model_battle.txt и копирует иконку юнита в папку новой фракции.
-// Best-effort: частичные сбои не прерывают операцию.
-func (w *GameWriter) CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error {
+// CopyUnitModelAssets добавляет texture/model_sprite записи в descr_model_battle.txt
+// и копирует обе иконки юнита: маленькую (#[TYPE].TGA) и портрет ([TYPE]_INFO.TGA).
+func (w *GameWriter) CopyUnitModelAssets(soldierModel, srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
 	if soldierModel == "" || srcFaction == "" || dstFaction == "" || srcFaction == dstFaction {
 		return nil
 	}
@@ -19,23 +18,22 @@ func (w *GameWriter) CopyUnitModelAssets(soldierModel, srcFaction, dstFaction st
 		return err
 	}
 	_ = w.patchDescBattleModels(soldierModel, srcFaction, dstFaction)
-	_ = w.copyUnitIcon(soldierModel, srcFaction, dstFaction)
+	_ = w.copyUnitIcon(srcUnitType, dstUnitType, srcFaction, dstFaction)
+	_ = w.copyUnitInfoCard(srcUnitType, dstUnitType, srcFaction, dstFaction)
 	return nil
 }
 
 func (w *GameWriter) patchDescBattleModels(soldierModel, srcFaction, dstFaction string) error {
 	origPath := filepath.Join(w.gamePath, "descr_model_battle.txt")
 	if _, err := os.Stat(origPath); err != nil {
-		return nil // RTW без этого файла — ничего не делаем
+		return nil
 	}
 
-	// Однократный бэкап оригинала
 	backupPath := filepath.Join(w.backupPath, "descr_model_battle.txt")
 	if _, err := os.Stat(backupPath); err != nil {
 		_ = copyFile(origPath, backupPath)
 	}
 
-	// Читаем из черновика (если он уже есть от предыдущих операций), иначе из оригинала
 	draftPath := filepath.Join(w.draftPath, "descr_model_battle.txt")
 	srcPath := origPath
 	if _, err := os.Stat(draftPath); err == nil {
@@ -54,28 +52,20 @@ func (w *GameWriter) patchDescBattleModels(soldierModel, srcFaction, dstFaction 
 	return os.WriteFile(draftPath, []byte(patched), 0644)
 }
 
-// addFactionModelEntries ищет блок `type soldierModel` и вставляет:
-//   - `texture dstFaction, <path>` после последней texture-строки
-//   - `model_sprite dstFaction, <range>, <path>` после последней model_sprite-строки
-//
-// Разделитель между ключом и значением копируется из существующих строк (не хардкодится).
-// Если записи уже есть или блок не найден — unchanged=false.
 func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string) (string, bool) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	lines := strings.Split(content, "\n")
 
 	inTarget := false
 
-	// Texture
 	lastTextureLine := -1
 	texturePath := ""
-	texSep := "\t\t\t\t" // fallback
+	texSep := "\t\t\t\t"
 	hasDstTexture := false
 
-	// Model sprite
 	lastSpriteLine := -1
-	spriteTail := "" // "60.0, data/sprites/gauls_xxx.spr"
-	spriteSep := "\t" // fallback
+	spriteTail := ""
+	spriteSep := "\t"
 	hasDstSprite := false
 
 	for i, raw := range lines {
@@ -90,7 +80,7 @@ func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string
 
 		if fields[0] == "type" {
 			if inTarget {
-				break // вышли из блока целевой модели
+				break
 			}
 			if len(fields) >= 2 && fields[1] == soldierModel {
 				inTarget = true
@@ -103,14 +93,12 @@ func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string
 		}
 
 		if fields[0] == "texture" {
-			// Формат: texture   faction, path
 			rest := t[len("texture"):]
 			if ci := strings.Index(rest, ","); ci != -1 {
 				faction := strings.TrimSpace(rest[:ci])
 				path := strings.TrimSpace(rest[ci+1:])
 				if strings.EqualFold(faction, srcFaction) && texturePath == "" {
 					texturePath = path
-					// Извлекаем реальный разделитель из необрезанной строки
 					rawAfter := raw[strings.Index(raw, "texture")+len("texture"):]
 					if s := leadingWhitespace(rawAfter); s != "" {
 						texSep = s
@@ -124,11 +112,10 @@ func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string
 		}
 
 		if fields[0] == "model_sprite" {
-			// Формат: model_sprite   faction, range, path
 			rest := t[len("model_sprite"):]
 			if ci := strings.Index(rest, ","); ci != -1 {
 				faction := strings.TrimSpace(rest[:ci])
-				tail := strings.TrimSpace(rest[ci+1:]) // "60.0, path"
+				tail := strings.TrimSpace(rest[ci+1:])
 				if strings.EqualFold(faction, srcFaction) && spriteTail == "" {
 					spriteTail = tail
 					rawAfter := raw[strings.Index(raw, "model_sprite")+len("model_sprite"):]
@@ -173,7 +160,6 @@ func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string
 		return content, false
 	}
 
-	// Вставки от конца к началу, чтобы не сбивать индексы
 	sort.Slice(inserts, func(i, j int) bool {
 		return inserts[i].afterLine > inserts[j].afterLine
 	})
@@ -181,7 +167,6 @@ func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string
 		lines = sliceInsertAfter(lines, ins.afterLine, ins.newLine)
 	}
 
-	// RTW требует CRLF
 	return strings.ReplaceAll(strings.Join(lines, "\n"), "\n", "\r\n"), true
 }
 
@@ -193,81 +178,212 @@ func sliceInsertAfter(lines []string, idx int, newLine string) []string {
 	return out
 }
 
-// findUnitIcon ищет файл иконки юнита (#soldierModel.tga) в папке unitsDir.
-// Сначала ищет в подпапке srcFaction, затем перебирает все остальные подпапки.
-// Возвращает полный путь и имя файла, либо пустые строки если не найдено.
-func findUnitIcon(unitsDir, soldierModel, srcFaction string) (fullPath, fileName string) {
+// findUnitIconData ищет маленькую иконку юнита (#[TYPE].TGA) по типу юнита только на файловой системе.
+func findUnitIconData(unitsDir, unitType, faction string) []byte {
+	iconBase := "#" + strings.ReplaceAll(unitType, " ", "_")
 	variants := []string{
-		"#" + soldierModel + ".tga",
-		"#" + strings.ToLower(soldierModel) + ".tga",
-		"#" + strings.ToUpper(soldierModel) + ".tga",
+		iconBase + ".tga",
+		strings.ToLower(iconBase) + ".tga",
+		strings.ToUpper(iconBase) + ".TGA",
 	}
 
-	tryDir := func(dir string) (string, string) {
+	tryDir := func(dir string) []byte {
 		for _, name := range variants {
-			p := filepath.Join(dir, name)
-			if _, err := os.Stat(p); err == nil {
-				return p, name
+			data, err := os.ReadFile(filepath.Join(dir, name))
+			if err == nil {
+				return data
 			}
 		}
-		return "", ""
+		return nil
 	}
 
-	// Сначала в папке исходной фракции
-	if p, n := tryDir(filepath.Join(unitsDir, srcFaction)); p != "" {
-		return p, n
+	if data := tryDir(filepath.Join(unitsDir, faction)); data != nil {
+		return data
 	}
-
-	// Fallback: ищем в остальных подпапках (на случай несовпадения имени папки или шаренных иконок)
-	entries, err := os.ReadDir(unitsDir)
-	if err != nil {
-		return "", ""
-	}
+	entries, _ := os.ReadDir(unitsDir)
 	for _, e := range entries {
-		if !e.IsDir() || strings.EqualFold(e.Name(), srcFaction) {
+		if !e.IsDir() || strings.EqualFold(e.Name(), faction) {
 			continue
 		}
-		if p, n := tryDir(filepath.Join(unitsDir, e.Name())); p != "" {
-			return p, n
+		if data := tryDir(filepath.Join(unitsDir, e.Name())); data != nil {
+			return data
 		}
 	}
-	return "", ""
+	return nil
 }
 
-func (w *GameWriter) copyUnitIcon(soldierModel, srcFaction, dstFaction string) error {
-	unitsDir := filepath.Join(w.gamePath, "UI", "units")
-	srcPath, iconName := findUnitIcon(unitsDir, soldierModel, srcFaction)
-	if srcPath == "" {
-		return nil // иконки нет — best-effort
+// findUnitInfoData ищет портрет юнита ([TYPE]_INFO.TGA, 160×210) только на файловой системе.
+// Паки не используются: их контент бывает некорректным (placeholder'ы или чужие портреты).
+func findUnitInfoData(unitInfoDir, unitType, faction string) []byte {
+	infoBase := strings.ReplaceAll(unitType, " ", "_") + "_info"
+	variants := []string{
+		infoBase + ".tga",
+		strings.ToLower(infoBase) + ".tga",
+		strings.ToUpper(infoBase) + ".TGA",
 	}
+
+	tryDir := func(dir string) []byte {
+		for _, name := range variants {
+			data, err := os.ReadFile(filepath.Join(dir, name))
+			if err == nil {
+				return data
+			}
+		}
+		return nil
+	}
+
+	if data := tryDir(filepath.Join(unitInfoDir, faction)); data != nil {
+		return data
+	}
+	entries, _ := os.ReadDir(unitInfoDir)
+	for _, e := range entries {
+		if !e.IsDir() || strings.EqualFold(e.Name(), faction) {
+			continue
+		}
+		if data := tryDir(filepath.Join(unitInfoDir, e.Name())); data != nil {
+			return data
+		}
+	}
+	return nil
+}
+
+func (w *GameWriter) copyUnitIcon(srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
+	unitsDir := filepath.Join(w.gamePath, "UI", "units")
+	iconData := findUnitIconData(unitsDir, srcUnitType, srcFaction)
+	if iconData == nil {
+		// Fallback: base RTW paks (never mod paks — they can contain wrong assets)
+		if basePacksDir := findBasePacksDir(w.gamePath); basePacksDir != "" {
+			iconName := "#" + strings.ToUpper(strings.ReplaceAll(srcUnitType, " ", "_")) + ".TGA"
+			iconData = searchPaksDir(basePacksDir, iconName, strings.ToUpper(srcFaction))
+		}
+	}
+	if iconData == nil {
+		return nil
+	}
+	dstName := "#" + strings.ToUpper(strings.ReplaceAll(dstUnitType, " ", "_")) + ".TGA"
 	dstDir := filepath.Join(w.draftPath, "UI", "units", dstFaction)
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}
-	return copyFile(srcPath, filepath.Join(dstDir, iconName))
+	return os.WriteFile(filepath.Join(dstDir, dstName), iconData, 0644)
 }
 
-// CopyUnitCardDraft копирует unit card (ui/units/[srcFaction]/#[soldierModel].tga)
-// из папки исходной фракции в папку целевой фракции в черновик.
-// Если иконка не найдена в папке srcFaction, ищет во всех остальных подпапках units/.
-// Best-effort: частичные сбои не прерывают операцию.
-func (w *GameWriter) CopyUnitCardDraft(soldierModel, srcFaction, dstFaction string) error {
-	if soldierModel == "" || srcFaction == "" || dstFaction == "" || srcFaction == dstFaction {
+// copyUnitInfoCard копирует портрет юнита RTW ([TYPE]_INFO.TGA, 160×210) в папку новой фракции.
+func (w *GameWriter) copyUnitInfoCard(srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
+	unitInfoDir := filepath.Join(w.gamePath, "UI", "unit_info")
+	infoData := findUnitInfoData(unitInfoDir, srcUnitType, srcFaction)
+	if infoData == nil {
+		// Fallback: base RTW paks only
+		if basePacksDir := findBasePacksDir(w.gamePath); basePacksDir != "" {
+			infoName := strings.ToUpper(strings.ReplaceAll(srcUnitType, " ", "_")) + "_INFO.TGA"
+			infoData = searchPaksDir(basePacksDir, infoName, strings.ToUpper(srcFaction))
+		}
+	}
+	if infoData == nil {
+		return nil
+	}
+	dstName := strings.ToUpper(strings.ReplaceAll(dstUnitType, " ", "_")) + "_INFO.TGA"
+	dstDir := filepath.Join(w.draftPath, "UI", "unit_info", dstFaction)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dstDir, dstName), infoData, 0644)
+}
+
+// CopyUnitCardDraft копирует unit card иконку для M2TW:
+// ui/units/[srcFaction]/#[srcUnitType].tga → draft/ui/units/[dstFaction]/#[dstUnitType].TGA
+func (w *GameWriter) CopyUnitCardDraft(srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
+	if srcUnitType == "" || dstUnitType == "" || dstFaction == "" {
 		return nil
 	}
 	if err := w.ensureInit(); err != nil {
 		return err
 	}
 	unitsDir := filepath.Join(w.gamePath, "ui", "units")
-	srcPath, iconName := findUnitIcon(unitsDir, soldierModel, srcFaction)
-	if srcPath == "" {
+	iconData := findUnitIconData(unitsDir, srcUnitType, srcFaction)
+	if iconData == nil {
 		return nil
 	}
+	dstName := "#" + strings.ToUpper(strings.ReplaceAll(dstUnitType, " ", "_")) + ".TGA"
 	dstDir := filepath.Join(w.draftPath, "ui", "units", dstFaction)
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}
-	return copyFile(srcPath, filepath.Join(dstDir, iconName))
+	return os.WriteFile(filepath.Join(dstDir, dstName), iconData, 0644)
+}
+
+// RenameUnitIcon переименовывает иконку RTW при смене типа юнита.
+func (w *GameWriter) RenameUnitIcon(oldType, newType, faction string) error {
+	return w.renameUnitIconDraft(oldType, newType, faction, "UI")
+}
+
+// RenameUnitCardDraft переименовывает иконку M2TW при смене типа юнита.
+func (w *GameWriter) RenameUnitCardDraft(oldType, newType, faction string) error {
+	return w.renameUnitIconDraft(oldType, newType, faction, "ui")
+}
+
+func (w *GameWriter) renameUnitIconDraft(oldType, newType, faction, unitsRoot string) error {
+	if oldType == newType || faction == "" {
+		return nil
+	}
+	if err := w.ensureInit(); err != nil {
+		return err
+	}
+	unitsDir := filepath.Join(w.gamePath, unitsRoot, "units")
+	iconData := findUnitIconData(unitsDir, oldType, faction)
+	if iconData != nil {
+		dstName := "#" + strings.ToUpper(strings.ReplaceAll(newType, " ", "_")) + ".TGA"
+		dstDir := filepath.Join(w.draftPath, unitsRoot, "units", faction)
+		if err := os.MkdirAll(dstDir, 0755); err != nil {
+			return err
+		}
+		_ = os.WriteFile(filepath.Join(dstDir, dstName), iconData, 0644)
+	}
+	// Для RTW также переименовываем портрет юнита (_info.tga)
+	if strings.ToUpper(unitsRoot) == "UI" {
+		unitInfoDir := filepath.Join(w.gamePath, unitsRoot, "unit_info")
+		infoData := findUnitInfoData(unitInfoDir, oldType, faction)
+		if infoData != nil {
+			dstName := strings.ToUpper(strings.ReplaceAll(newType, " ", "_")) + "_INFO.TGA"
+			dstDir := filepath.Join(w.draftPath, unitsRoot, "unit_info", faction)
+			if err := os.MkdirAll(dstDir, 0755); err != nil {
+				return err
+			}
+			_ = os.WriteFile(filepath.Join(dstDir, dstName), infoData, 0644)
+		}
+	}
+	return nil
+}
+
+// DeleteUnitAssets удаляет иконки юнита (#[TYPE].TGA и [TYPE]_INFO.TGA) из всех
+// папок фракций в game и draft директориях (для обоих RTW "UI" и M2TW "ui" вариантов).
+func (w *GameWriter) DeleteUnitAssets(unitType string) error {
+	if err := w.ensureInit(); err != nil {
+		return err
+	}
+	typeKey := strings.ToUpper(strings.ReplaceAll(unitType, " ", "_"))
+	smallName := "#" + typeKey + ".TGA"
+	infoName := typeKey + "_INFO.TGA"
+
+	for _, uiRoot := range []string{"UI", "ui"} {
+		for _, root := range []string{w.gamePath, w.draftPath} {
+			deleteIconFromSubdirs(filepath.Join(root, uiRoot, "units"), smallName)
+			deleteIconFromSubdirs(filepath.Join(root, uiRoot, "unit_info"), infoName)
+		}
+	}
+	return nil
+}
+
+func deleteIconFromSubdirs(dir, filename string) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(dir, e.Name())
+		_ = os.Remove(filepath.Join(subDir, filename))
+		_ = os.Remove(filepath.Join(subDir, strings.ToLower(filename)))
+	}
 }
 
 // applyDirRecursive копирует всё содержимое draft/[relDir]/ → game/[relDir]/.

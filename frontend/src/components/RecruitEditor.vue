@@ -5,6 +5,8 @@ import {
   UpdateBuildingLevel, RevertBuildings,
 } from '../../wailsjs/go/main/App'
 
+const emit = defineEmits(['changed'])
+
 const subTab = ref('units') // 'units' | 'buildings'
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -243,6 +245,7 @@ async function callUpdate(groupName, levelName, newSlots) {
     await UpdateBuildingLevel(groupName, levelName, newSlots)
     await refreshBuildings()
     localDirty.value = true
+    emit('changed')
   } catch (e) {
     opError.value = String(e)
   } finally {

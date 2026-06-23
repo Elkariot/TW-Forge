@@ -310,8 +310,21 @@ func (a *App) GetUnitChangeType(unitType string) string {
 	return a.unitService.GetUnitChangeType(unitType)
 }
 
-func (a *App) DeleteUnit(unitType string) error {
-	return a.unitService.Delete(unitType)
+func (a *App) DeleteUnit(unitType, faction string) error {
+	return a.unitService.Delete(unitType, faction)
+}
+
+func (a *App) HardDeleteUnit(unitType string) error {
+	return a.unitService.HardDelete(unitType)
+}
+
+func (a *App) IsCopyUnit(unitType string) bool {
+	for _, word := range strings.Fields(strings.ToLower(unitType)) {
+		if word == "copy" {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) RevertUnit(unitType string) error {
@@ -581,11 +594,18 @@ func (a *App) CreateM2TWUnit(templateType, newType, faction string) error {
 	return a.m2twUnitService.CreateUnit(templateType, newType, faction)
 }
 
-func (a *App) DeleteM2TWUnit(unitType string) error {
+func (a *App) DeleteM2TWUnit(unitType, faction string) error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.Delete(unitType)
+	return a.m2twUnitService.Delete(unitType, faction)
+}
+
+func (a *App) HardDeleteM2TWUnit(unitType string) error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	return a.m2twUnitService.HardDelete(unitType)
 }
 
 func (a *App) RevertM2TWUnit(unitType string) error {

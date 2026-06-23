@@ -35,9 +35,13 @@ type M2TWGameRepository interface {
 	// Mutations
 	AddUnit(unit domain.M2TWUnit) error
 	UpdateUnit(originalType string, unit domain.M2TWUnit) error
-	DeleteUnit(unitType string) error
+	DeleteUnit(unitType, faction string) error
+	HardDeleteUnit(unitType string) error
 	CopyBattleModel(srcType, dstType string) error
-	CopyUnitCard(soldierModel, srcFaction, dstFaction string) error
+	DeleteBattleModel(unitType string) error
+	CopyUnitCard(srcUnitType, dstUnitType, srcFaction, dstFaction string) error
+	RenameUnitCard(oldType, newType, faction string) error
+	DeleteUnitAssets(unitType string) error
 
 	// Revert
 	RevertUnit(unitType string) error
@@ -54,7 +58,10 @@ type M2TWWriter interface {
 	SaveM2TWDraft(data domain.M2TWGameData, changes map[string]ChangeType) error
 	SaveM2TWBuildingsDraft(data domain.M2TWGameData) error
 	CopyBattleModelDraft(srcName, dstName string) error
-	CopyUnitCardDraft(soldierModel, srcFaction, dstFaction string) error
+	DeleteBattleModelDraft(unitType string) error
+	CopyUnitCardDraft(srcUnitType, dstUnitType, srcFaction, dstFaction string) error
+	RenameUnitCardDraft(oldType, newType, faction string) error
+	DeleteUnitAssets(unitType string) error
 	Apply() error
 }
 
@@ -100,6 +107,9 @@ func (r *InMemoryM2TWRepository) SaveDraft() error {
 }
 
 func (r *InMemoryM2TWRepository) SaveBuildingsDraft() error {
+	if !r.buildingsDirty {
+		return nil
+	}
 	if r.writer == nil {
 		return fmt.Errorf("writer not configured")
 	}
@@ -113,11 +123,32 @@ func (r *InMemoryM2TWRepository) CopyBattleModel(srcType, dstType string) error 
 	return r.writer.CopyBattleModelDraft(srcType, dstType)
 }
 
-func (r *InMemoryM2TWRepository) CopyUnitCard(soldierModel, srcFaction, dstFaction string) error {
+func (r *InMemoryM2TWRepository) DeleteBattleModel(unitType string) error {
 	if r.writer == nil {
 		return nil
 	}
-	return r.writer.CopyUnitCardDraft(soldierModel, srcFaction, dstFaction)
+	return r.writer.DeleteBattleModelDraft(unitType)
+}
+
+func (r *InMemoryM2TWRepository) CopyUnitCard(srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.CopyUnitCardDraft(srcUnitType, dstUnitType, srcFaction, dstFaction)
+}
+
+func (r *InMemoryM2TWRepository) RenameUnitCard(oldType, newType, faction string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.RenameUnitCardDraft(oldType, newType, faction)
+}
+
+func (r *InMemoryM2TWRepository) DeleteUnitAssets(unitType string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.DeleteUnitAssets(unitType)
 }
 
 func (r *InMemoryM2TWRepository) Save() error {
@@ -127,6 +158,9 @@ func (r *InMemoryM2TWRepository) Save() error {
 	if err := r.writer.Apply(); err != nil {
 		return err
 	}
+	// Reset state: applied changes are now the new baseline.
+	r.original = r.working.DeepCopy()
+	r.changes = make(map[string]ChangeType)
 	r.buildingsDirty = false
 	return nil
 }

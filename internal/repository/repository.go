@@ -43,7 +43,9 @@ type GameRepository interface {
 	// Mutations
 	AddUnit(unit domain.Unit) error
 	UpdateUnit(originalType string, unit domain.Unit) error
-	DeleteUnit(unitType string) error
+	DeleteUnit(unitType, faction string) error
+	HardDeleteUnit(unitType string) error
+	DeleteUnitAssets(unitType string) error
 
 	// Revert
 	RevertUnit(unitType string) error
@@ -56,14 +58,17 @@ type GameRepository interface {
 	Save() error
 
 	// Model assets (RTW)
-	CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error
+	CopyUnitModelAssets(soldierModel, srcUnitType, dstUnitType, srcFaction, dstFaction string) error
+	RenameUnitIcon(oldType, newType, faction string) error
 }
 
 type Writer interface {
 	SaveDraft(data domain.GameData, changes map[string]ChangeType) error
 	SaveBuildingsDraft(data domain.GameData) error
 	Apply() error
-	CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error
+	CopyUnitModelAssets(soldierModel, srcUnitType, dstUnitType, srcFaction, dstFaction string) error
+	RenameUnitIcon(oldType, newType, faction string) error
+	DeleteUnitAssets(unitType string) error
 }
 
 type InMemoryRepository struct {
@@ -121,13 +126,30 @@ func (r *InMemoryRepository) Save() error {
 	if err := r.writer.Apply(); err != nil {
 		return err
 	}
+	// Reset state: applied changes are now the new baseline.
+	r.original = r.working.DeepCopy()
+	r.changes = make(map[string]ChangeType)
 	r.buildingsDirty = false
 	return nil
 }
 
-func (r *InMemoryRepository) CopyUnitModelAssets(soldierModel, srcFaction, dstFaction string) error {
+func (r *InMemoryRepository) CopyUnitModelAssets(soldierModel, srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
 	if r.writer == nil {
 		return nil
 	}
-	return r.writer.CopyUnitModelAssets(soldierModel, srcFaction, dstFaction)
+	return r.writer.CopyUnitModelAssets(soldierModel, srcUnitType, dstUnitType, srcFaction, dstFaction)
+}
+
+func (r *InMemoryRepository) RenameUnitIcon(oldType, newType, faction string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.RenameUnitIcon(oldType, newType, faction)
+}
+
+func (r *InMemoryRepository) DeleteUnitAssets(unitType string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.DeleteUnitAssets(unitType)
 }

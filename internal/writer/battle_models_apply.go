@@ -2,6 +2,7 @@ package writer
 
 import (
 	"fmt"
+	"tw-forge/internal/domain"
 	"tw-forge/internal/parser"
 	"os"
 	"path/filepath"
@@ -46,6 +47,52 @@ func (w *GameWriter) CopyBattleModelDraft(srcName, dstName string) error {
 	newDB, err := CopyModelEntry(db, srcName, dstName)
 	if err != nil {
 		return err
+	}
+
+	return WriteBattleModels(newDB, draftModelDB)
+}
+
+// DeleteBattleModelDraft removes a model entry by name from the draft modeldb.
+// If the entry doesn't exist, it's a no-op.
+func (w *GameWriter) DeleteBattleModelDraft(unitType string) error {
+	if err := w.ensureInit(); err != nil {
+		return err
+	}
+
+	gameModelDB := filepath.Join(w.gamePath, "battle_models.modeldb")
+	if _, err := os.Stat(gameModelDB); err != nil {
+		return nil // no modeldb at all
+	}
+
+	draftModelDB := filepath.Join(w.draftPath, "battle_models.modeldb")
+
+	loadPath := gameModelDB
+	if _, err := os.Stat(draftModelDB); err == nil {
+		loadPath = draftModelDB
+	}
+
+	db, err := parser.ParseBattleModels(loadPath)
+	if err != nil {
+		return fmt.Errorf("parse battle_models.modeldb: %w", err)
+	}
+
+	idx, exists := db.Index[unitType]
+	if !exists {
+		return nil // nothing to remove
+	}
+
+	newDB := &domain.BattleModelsDB{
+		Header: db.Header,
+		Count:  db.Count - 1,
+		Models: make([]domain.BattleModel, 0, len(db.Models)-1),
+		Index:  make(map[string]int, len(db.Index)-1),
+	}
+	for i, m := range db.Models {
+		if i == idx {
+			continue
+		}
+		newDB.Index[m.Name] = len(newDB.Models)
+		newDB.Models = append(newDB.Models, m)
 	}
 
 	return WriteBattleModels(newDB, draftModelDB)

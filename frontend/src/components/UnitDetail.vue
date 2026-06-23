@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes, GetUnitChangeType, RevertUnit, DeleteUnit, GetBuildings, UpdateBuildingLevel, GetFactions } from '../../wailsjs/go/main/App'
+import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes, GetUnitChangeType, RevertUnit, DeleteUnit, HardDeleteUnit, IsCopyUnit, GetBuildings, UpdateBuildingLevel, GetFactions } from '../../wailsjs/go/main/App'
 import UnitAssets from './UnitAssets.vue'
 import {
   UNIT_CATEGORIES, UNIT_CLASSES, VOICE_TYPES,
@@ -151,13 +151,33 @@ function cancel() {
 }
 
 async function deleteUnit() {
+  const type = originalType.value
+  const isCopy = await IsCopyUnit(type)
+
+  if (isCopy) {
+    const choice = window.confirm(
+      `"${type}" — копия юнита.\n\nОК = Полное удаление (убрать из EDU + удалить иконки)\nОтмена = Удалить только из фракции "${props.faction}"`
+    )
+    try {
+      if (choice) {
+        await HardDeleteUnit(type)
+      } else {
+        await DeleteUnit(type, props.faction)
+      }
+      emit('deleted')
+    } catch (e) {
+      error.value = String(e)
+    }
+    return
+  }
+
   const isNew = unitChangeType.value === 'added'
   const msg = isNew
-    ? `Удалить созданную копию "${unit.value?.Type}"?`
-    : `Мягко удалить юнит "${unit.value?.Type}"? Он будет убран из всех фракций и зданий (строка останется в файле).`
+    ? `Удалить созданный юнит "${type}"?`
+    : `Удалить юнит "${type}" из фракции "${props.faction}"? Если фракция последняя — юнит будет помечен удалённым.`
   if (!confirm(msg)) return
   try {
-    await DeleteUnit(originalType.value)
+    await DeleteUnit(type, props.faction)
     emit('deleted')
   } catch (e) {
     error.value = String(e)

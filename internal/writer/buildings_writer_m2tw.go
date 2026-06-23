@@ -19,7 +19,7 @@ func (w *GameWriter) SaveM2TWBuildingsDraft(data domain.M2TWGameData) error {
 }
 
 func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) error {
-	srcFile, err := os.Open(filepath.Join(w.gamePath, "export_descr_buildings.txt"))
+	srcFile, err := os.Open(filepath.Join(w.backupPath, "export_descr_buildings.txt"))
 	if err != nil {
 		return fmt.Errorf("open M2TW buildings: %w", err)
 	}
@@ -43,6 +43,9 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 	scanner := bufio.NewScanner(srcFile)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
+	// M2TW data files use CRLF; Scanner.Text() strips \r.
+	writeLine := func(s string) { fmt.Fprintf(bw, "%s\r\n", s) }
+
 	depth := 0
 	currentGroup := ""
 	currentLevel := ""
@@ -63,7 +66,7 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 			if depth == 3 {
 				depWritten = false
 			}
-			fmt.Fprintln(bw, line)
+			writeLine(line)
 			if depth == 4 {
 				if inCapability {
 					inCapBlock = true
@@ -71,10 +74,10 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 					k := levelKey{currentGroup, currentLevel}
 					if lvl, ok := levelIndex[k]; ok {
 						for _, bonus := range lvl.BonusLines {
-							fmt.Fprintln(bw, capIndent+bonus)
+							writeLine(capIndent + bonus)
 						}
 						for _, pool := range lvl.RecruitPools {
-							fmt.Fprintln(bw, capIndent+formatM2TWRecruitPool(pool))
+							writeLine(capIndent + formatM2TWRecruitPool(pool))
 						}
 					}
 				} else if inUpgrades {
@@ -83,7 +86,7 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 					k := levelKey{currentGroup, currentLevel}
 					if lvl, ok := levelIndex[k]; ok {
 						for _, upg := range lvl.Upgrades {
-							fmt.Fprintln(bw, upgradeIndent+upg)
+							writeLine(upgradeIndent + upg)
 						}
 					}
 				}
@@ -97,30 +100,32 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 				inUpgradeBlock = false
 			} else if depth == 3 && !depWritten {
 				k := levelKey{currentGroup, currentLevel}
-				if lvl, ok := levelIndex[k]; ok && lvl.Dependency != nil && lvl.Dependency.Group != "" {
+				if lvl, ok := levelIndex[k]; ok && lvl.Dependency != nil && lvl.Dependency.Group != "" && !lvl.DependencyInline {
 					indent := leadingWhitespace(line) + "\t"
-					fmt.Fprintln(bw, indent+"building_present_min_level "+lvl.Dependency.Group+" "+lvl.Dependency.Level)
+					writeLine(indent + "building_present_min_level " + lvl.Dependency.Group + " " + lvl.Dependency.Level)
 				}
 				depWritten = true
 			}
 			depth--
-			fmt.Fprintln(bw, line)
+			writeLine(line)
 			continue
 		}
 
-		if trimmed != "" && !strings.HasPrefix(trimmed, ";") {
-			if inCapBlock {
+		if inCapBlock {
+			if trimmed != "" && !strings.HasPrefix(trimmed, ";") {
 				if lead := leadingWhitespace(line); lead != "" {
 					capIndent = lead
 				}
-				continue
 			}
-			if inUpgradeBlock {
+			continue
+		}
+		if inUpgradeBlock {
+			if trimmed != "" && !strings.HasPrefix(trimmed, ";") {
 				if lead := leadingWhitespace(line); lead != "" {
 					upgradeIndent = lead
 				}
-				continue
 			}
+			continue
 		}
 
 		if depth == 2 && trimmed != "" && !strings.HasPrefix(trimmed, ";") {
@@ -131,9 +136,9 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 				indent := leadingWhitespace(line)
 				k := levelKey{currentGroup, lvlName}
 				if lvl, ok := levelIndex[k]; ok {
-					fmt.Fprintln(bw, indent+formatM2TWLevelDefinition(lvlName, lvl))
+					writeLine(indent + formatM2TWLevelDefinition(lvlName, lvl))
 				} else {
-					fmt.Fprintln(bw, line)
+					writeLine(line)
 				}
 				continue
 			}
@@ -147,27 +152,25 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 			if len(fields) >= 1 && lvlOk {
 				switch fields[0] {
 				case "construction":
-					fmt.Fprintln(bw, indent+"construction  "+strconv.Itoa(lvl.Construction))
+					writeLine(indent + "construction  " + strconv.Itoa(lvl.Construction))
 					continue
 				case "cost":
-					fmt.Fprintln(bw, indent+"cost  "+strconv.Itoa(lvl.Cost))
+					writeLine(indent + "cost  " + strconv.Itoa(lvl.Cost))
 					continue
 				case "settlement_min":
 					if lvl.SettlementMin != "" {
-						fmt.Fprintln(bw, indent+"settlement_min "+lvl.SettlementMin)
+						writeLine(indent + "settlement_min " + lvl.SettlementMin)
 					}
 					continue
 				case "convert_to":
-					if lvl.ConvertTo != 0 {
-						fmt.Fprintln(bw, indent+"convert_to "+strconv.Itoa(lvl.ConvertTo))
-					}
+					writeLine(indent + "convert_to " + strconv.Itoa(lvl.ConvertTo))
 					continue
 				case "building_present_min_level":
 					continue // will inject updated version before capability/upgrades/}
 				case "capability", "upgrades":
 					if !depWritten {
-						if lvl.Dependency != nil && lvl.Dependency.Group != "" {
-							fmt.Fprintln(bw, indent+"building_present_min_level "+lvl.Dependency.Group+" "+lvl.Dependency.Level)
+						if lvl.Dependency != nil && lvl.Dependency.Group != "" && !lvl.DependencyInline {
+							writeLine(indent + "building_present_min_level " + lvl.Dependency.Group + " " + lvl.Dependency.Level)
 						}
 						depWritten = true
 					}
@@ -175,7 +178,7 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 			}
 		}
 
-		fmt.Fprintln(bw, line)
+		writeLine(line)
 
 		if trimmed == "" || strings.HasPrefix(trimmed, ";") {
 			continue
@@ -231,6 +234,12 @@ func formatM2TWLevelDefinition(name string, lvl domain.M2TWBuildingLevel) string
 			sb.WriteString(", ")
 		}
 		sb.WriteString("}")
+	}
+	if lvl.DependencyInline && lvl.Dependency != nil && lvl.Dependency.Group != "" {
+		sb.WriteString(" and building_present_min_level ")
+		sb.WriteString(lvl.Dependency.Group)
+		sb.WriteString(" ")
+		sb.WriteString(lvl.Dependency.Level)
 	}
 	return sb.String()
 }

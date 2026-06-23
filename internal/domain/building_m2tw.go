@@ -13,6 +13,7 @@ type M2TWBuildingLevel struct {
 	SettlementType   string // "city" or "castle"
 	RequiredCultures []string
 	Dependency       *BuildingDependency
+	DependencyInline bool // true when dependency appears on the level header line, not inside the block
 	ConvertTo        int
 	RecruitPools     []M2TWRecruitPool
 	BonusLines       []string

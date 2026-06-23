@@ -5,6 +5,8 @@ import {
   UpdateM2TWBuildingLevel, RevertM2TWBuildings,
 } from '../../wailsjs/go/main/App'
 
+const emit = defineEmits(['changed'])
+
 const subTab = ref('units') // 'units' | 'buildings'
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -230,6 +232,7 @@ async function callUpdate(groupName, levelName, newPools, bonusLines) {
     await UpdateM2TWBuildingLevel(groupName, levelName, newPools, bonusLines ?? [])
     await refreshBuildings()
     localDirty.value = true
+    emit('changed')
   } catch (e) {
     opError.value = String(e)
   } finally {

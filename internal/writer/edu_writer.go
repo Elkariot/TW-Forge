@@ -19,7 +19,7 @@ const (
 )
 
 func (w *GameWriter) patchEDU(dst string, data domain.GameData, changes map[string]repository.ChangeType) error {
-	srcFile, err := os.Open(filepath.Join(w.gamePath, "export_descr_unit.txt"))
+	srcFile, err := os.Open(filepath.Join(w.backupPath, "export_descr_unit.txt"))
 	if err != nil {
 		return fmt.Errorf("open source EDU: %w", err)
 	}

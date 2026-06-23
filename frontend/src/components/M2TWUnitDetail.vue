@@ -2,7 +2,7 @@
 import { ref, watch, onMounted } from 'vue'
 import {
   GetM2TWUnitByType, UpdateM2TWUnit, GetM2TWUnitChangeType,
-  DeleteM2TWUnit, RevertM2TWUnit,
+  DeleteM2TWUnit, HardDeleteM2TWUnit, IsCopyUnit, RevertM2TWUnit,
   GetM2TWUnitBuildings, GetM2TWBuildings, UpdateM2TWBuildingLevel,
   GetM2TWFactions, GetM2TWProjectileTypes,
 } from '../../wailsjs/go/main/App'
@@ -196,13 +196,33 @@ function cancel() {
   emit('reverted')
 }
 async function deleteUnit() {
+  const type = originalType.value
+  const isCopy = await IsCopyUnit(type)
+
+  if (isCopy) {
+    const choice = window.confirm(
+      `"${type}" — копия юнита.\n\nОК = Полное удаление (убрать из EDU + удалить иконки)\nОтмена = Удалить только из фракции "${props.faction}"`
+    )
+    try {
+      if (choice) {
+        await HardDeleteM2TWUnit(type)
+      } else {
+        await DeleteM2TWUnit(type, props.faction)
+      }
+      emit('deleted')
+    } catch (e) {
+      error.value = String(e)
+    }
+    return
+  }
+
   const isNew = unitChangeType.value === 'added'
   const msg = isNew
-    ? `Удалить созданный юнит "${unit.value?.Type}"?`
-    : `Мягко удалить юнит "${unit.value?.Type}"? Он будет убран из всех фракций и зданий.`
+    ? `Удалить созданный юнит "${type}"?`
+    : `Удалить юнит "${type}" из фракции "${props.faction}"? Если фракция последняя — юнит будет помечен удалённым.`
   if (!confirm(msg)) return
   try {
-    await DeleteM2TWUnit(originalType.value)
+    await DeleteM2TWUnit(type, props.faction)
     emit('deleted')
   } catch (e) { error.value = String(e) }
 }
