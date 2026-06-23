@@ -1,10 +1,13 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   GetUnitIconInfo, GetUnitModelFiles, GetUnitTextureFiles,
   GetDataPaths, PickFile, SaveIconFile, CopyAssetToRoot,
   UploadAssetFile, AbsAssetPath, GetUnitByType,
 } from '../../wailsjs/go/main/App'
+
+const { t } = useI18n()
 
 const props = defineProps(['unitType', 'faction'])
 
@@ -50,7 +53,7 @@ function reset() {
 
 // ── Иконка ──────────────────────────────────────────────────────────────────
 async function editIcon() {
-  const src = await PickFile('Выберите иконку (.tga)', 'TGA files', '*.tga;*.TGA')
+  const src = await PickFile(t('assets.icon_title') + ' (.tga)', 'TGA files', '*.tga;*.TGA')
   if (!src) return
   openSaveDlg({ type: 'icon', srcPath: src })
 }
@@ -59,7 +62,7 @@ async function editIcon() {
 async function uploadAsset(subdir) {
   const ext = subdir.includes('texture') ? '*.tga;*.TGA;*.dds;*.DDS' : '*.cas;*.CAS'
   const label = subdir.includes('texture') ? 'Texture files' : 'CAS model files'
-  const src = await PickFile(`Выберите файл (${subdir})`, label, ext)
+  const src = await PickFile(subdir.includes('texture') ? t('assets.textures_title') : t('assets.models_title'), label, ext)
   if (!src) return
   openSaveDlg({ type: 'upload', srcPath: src, subdir })
 }
@@ -112,8 +115,8 @@ async function refreshAssets() {
 }
 
 function sourceLabel(src) {
-  if (src === 'mod')  return 'МОД'
-  if (src === 'base') return 'ИГРА'
+  if (src === 'mod')  return t('assets.badge_mod')
+  if (src === 'base') return t('assets.badge_game')
   return ''
 }
 function sourceClass(src) {
@@ -125,14 +128,14 @@ function sourceClass(src) {
 
 <template>
   <div class="ua-root">
-    <div v-if="loading" class="ua-loading">Загрузка...</div>
+    <div v-if="loading" class="ua-loading">{{ $t('assets.loading') }}</div>
     <div v-if="error" class="ua-error">{{ error }}</div>
 
-    <!-- Иконка -->
+    <!-- Icon -->
     <div class="ua-section">
       <div class="ua-section-head">
-        <span class="ua-section-title">Иконка</span>
-        <button class="ua-action-btn" @click="editIcon">Изменить</button>
+        <span class="ua-section-title">{{ $t('assets.icon_title') }}</span>
+        <button class="ua-action-btn" @click="editIcon">{{ $t('assets.change') }}</button>
       </div>
       <div class="ua-icon-row">
         <div class="ua-icon-wrap">
@@ -143,57 +146,57 @@ function sourceClass(src) {
           <span v-if="iconInfo?.Source" :class="['ua-badge', sourceClass(iconInfo.Source)]">
             {{ sourceLabel(iconInfo.Source) }}
           </span>
-          <span v-else class="ua-badge badge-missing">НЕТ</span>
+          <span v-else class="ua-badge badge-missing">{{ $t('assets.badge_missing') }}</span>
           <span class="ua-rel-path">{{ iconInfo?.RelPath || '—' }}</span>
         </div>
       </div>
     </div>
 
-    <!-- Модели -->
+    <!-- Models -->
     <div class="ua-section">
       <div class="ua-section-head">
-        <span class="ua-section-title">Модели (.cas)</span>
-        <button class="ua-action-btn" @click="uploadAsset('models_unit')">+ Загрузить</button>
+        <span class="ua-section-title">{{ $t('assets.models_title') }}</span>
+        <button class="ua-action-btn" @click="uploadAsset('models_unit')">{{ $t('assets.upload') }}</button>
       </div>
-      <div v-if="modelName" class="ua-model-hint">Префикс: <code>{{ modelName }}</code></div>
-      <div v-if="modelFiles.length === 0" class="ua-empty">Файлы не найдены</div>
+      <div v-if="modelName" class="ua-model-hint">{{ $t('assets.model_prefix') }} <code>{{ modelName }}</code></div>
+      <div v-if="modelFiles.length === 0" class="ua-empty">{{ $t('assets.files_not_found') }}</div>
       <div v-for="f in modelFiles" :key="f.RelPath" class="ua-file-row">
         <span :class="['ua-badge', sourceClass(f.Source)]">{{ sourceLabel(f.Source) }}</span>
         <span class="ua-file-name" :title="f.RelPath">{{ f.Name }}</span>
-        <button v-if="f.Source === 'base'" class="ua-copy-btn" @click="copyToMod(f)" title="Скопировать в мод">
-          → МОД
+        <button v-if="f.Source === 'base'" class="ua-copy-btn" @click="copyToMod(f)" :title="$t('assets.copy_to_mod')">
+          {{ $t('assets.copy_to_mod') }}
         </button>
       </div>
     </div>
 
-    <!-- Текстуры -->
+    <!-- Textures -->
     <div class="ua-section">
       <div class="ua-section-head">
-        <span class="ua-section-title">Текстуры (.tga/.dds)</span>
-        <button class="ua-action-btn" @click="uploadAsset('models_unit/textures')">+ Загрузить</button>
+        <span class="ua-section-title">{{ $t('assets.textures_title') }}</span>
+        <button class="ua-action-btn" @click="uploadAsset('models_unit/textures')">{{ $t('assets.upload') }}</button>
       </div>
-      <div v-if="modelName" class="ua-model-hint">Префикс: <code>{{ modelName }}</code></div>
-      <div v-if="texFiles.length === 0" class="ua-empty">Файлы не найдены</div>
+      <div v-if="modelName" class="ua-model-hint">{{ $t('assets.model_prefix') }} <code>{{ modelName }}</code></div>
+      <div v-if="texFiles.length === 0" class="ua-empty">{{ $t('assets.files_not_found') }}</div>
       <div v-for="f in texFiles" :key="f.RelPath" class="ua-file-row">
         <span :class="['ua-badge', sourceClass(f.Source)]">{{ sourceLabel(f.Source) }}</span>
         <span class="ua-file-name" :title="f.RelPath">{{ f.Name }}</span>
-        <button v-if="f.Source === 'base'" class="ua-copy-btn" @click="copyToMod(f)" title="Скопировать в мод">
-          → МОД
+        <button v-if="f.Source === 'base'" class="ua-copy-btn" @click="copyToMod(f)" :title="$t('assets.copy_to_mod')">
+          {{ $t('assets.copy_to_mod') }}
         </button>
       </div>
     </div>
 
-    <!-- Диалог выбора куда сохранять -->
+    <!-- Save dialog -->
     <div v-if="showSaveDlg" class="ua-dlg-overlay" @click.self="closeSaveDlg">
       <div class="ua-dlg">
-        <div class="ua-dlg-title">Куда сохранить?</div>
+        <div class="ua-dlg-title">{{ $t('assets.save_where') }}</div>
 
         <button
           v-if="dataPaths.mod"
           class="ua-dlg-btn ua-dlg-btn-mod"
           @click="saveToPath(dataPaths.mod, false)"
         >
-          Папка мода
+          {{ $t('assets.save_to_mod') }}
           <span class="ua-dlg-hint">{{ dataPaths.mod }}</span>
         </button>
 
@@ -202,13 +205,13 @@ function sourceClass(src) {
           class="ua-dlg-btn ua-dlg-btn-base"
           @click="saveToPath(dataPaths.base || dataPaths.mod, true)"
         >
-          <span class="ua-dlg-warn">⚠</span> Папка оригинальной игры
+          <span class="ua-dlg-warn">⚠</span> {{ $t('assets.save_to_game') }}
           <span class="ua-dlg-hint ua-dlg-hint-warn">
-            Резервная копия НЕ создаётся. Изменение затронет все моды, использующие этот файл.
+            {{ $t('assets.save_warning') }}
           </span>
         </button>
 
-        <button class="ua-dlg-cancel" @click="closeSaveDlg">Отмена</button>
+        <button class="ua-dlg-cancel" @click="closeSaveDlg">{{ $t('common.cancel') }}</button>
       </div>
     </div>
   </div>

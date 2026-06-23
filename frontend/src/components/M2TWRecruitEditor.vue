@@ -1,9 +1,12 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   GetM2TWAllUnits, GetM2TWBuildings, GetM2TWFactions,
   UpdateM2TWBuildingLevel, RevertM2TWBuildings,
 } from '../../wailsjs/go/main/App'
+
+const { t } = useI18n()
 
 const emit = defineEmits(['changed'])
 
@@ -13,7 +16,7 @@ const subTab = ref('units') // 'units' | 'buildings'
 
 const allUnits     = ref([])
 const allBuildings = ref([])
-const factions     = ref([{ Name: 'all', DisplayName: 'Все фракции' }])
+const factions     = ref([{ Name: 'all' }])
 const loading      = ref(true)
 const error        = ref(null)
 
@@ -53,7 +56,7 @@ onMounted(async () => {
     ])
     allUnits.value     = units
     allBuildings.value = buildings
-    factions.value     = [{ Name: 'all', DisplayName: 'Все фракции' }, ...factionList]
+    factions.value     = [{ Name: 'all' }, ...factionList]
     if (buildings.length > 0) expandedGroups.value = new Set([buildings[0].Name])
   } catch (e) {
     error.value = String(e)
@@ -129,7 +132,7 @@ const filteredBuildings = computed(() => {
         }
         // фильтр по фракции
         if (bldFactionFilter.value !== 'all') {
-          const rc = l.RequiredCultures ?? []
+          const rc = l.RequiredFactions ?? []
           if (rc.length > 0 && !rc.includes(bldFactionFilter.value)) return false
         }
         if (gMatch) return true
@@ -347,16 +350,16 @@ async function pickUnit(unit) {
 
     <!-- Sub-tab switcher -->
     <div class="recruit-tabs">
-      <button :class="['rtab', { active: subTab === 'units' }]"     @click="subTab = 'units'">По юнитам</button>
-      <button :class="['rtab', { active: subTab === 'buildings' }]" @click="subTab = 'buildings'">По зданиям</button>
+      <button :class="['rtab', { active: subTab === 'units' }]"     @click="subTab = 'units'">{{ $t('recruit.tab_by_units') }}</button>
+      <button :class="['rtab', { active: subTab === 'buildings' }]" @click="subTab = 'buildings'">{{ $t('recruit.tab_by_buildings') }}</button>
       <div class="rtab-spacer"></div>
       <span v-if="opError" class="tab-error">{{ opError }}</span>
       <button v-if="localDirty" class="btn-revert" :disabled="saving" @click="revertBuildings">
-        Отменить изменения
+        {{ $t('recruit.revert_changes') }}
       </button>
     </div>
 
-    <div v-if="loading" class="recruit-loading">Загрузка...</div>
+    <div v-if="loading" class="recruit-loading">{{ $t('recruit.loading') }}</div>
     <div v-else-if="error" class="recruit-error">{{ error }}</div>
     <div v-else class="recruit-body">
 
@@ -366,9 +369,9 @@ async function pickUnit(unit) {
         <!-- Левая панель: список юнитов -->
         <div class="recruit-left">
           <div class="recruit-filters">
-            <input v-model="searchQuery" class="recruit-search" placeholder="Поиск юнита..." />
+            <input v-model="searchQuery" class="recruit-search" :placeholder="$t('recruit.search_unit')" />
             <select v-model="selectedFactionName" class="recruit-select">
-              <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.DisplayName || f.Name }}</option>
+              <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.Name === 'all' ? $t('recruit.filter_all') : (f.DisplayName || f.Name) }}</option>
             </select>
           </div>
           <div class="recruit-list">
@@ -382,7 +385,7 @@ async function pickUnit(unit) {
               <div class="rui-meta">{{ unit.Category }} · {{ unit.Class }}</div>
               <div class="rui-faction">{{ (unit.Ownership ?? []).join(', ') }}</div>
             </div>
-            <div v-if="filteredUnits.length === 0" class="list-empty">Нет юнитов</div>
+            <div v-if="filteredUnits.length === 0" class="list-empty">{{ $t('recruit.no_units') }}</div>
           </div>
         </div>
 
@@ -393,9 +396,9 @@ async function pickUnit(unit) {
             <div class="right-header">
               <span class="rh-title">{{ selectedUnit.Name || selectedUnit.Type }}</span>
               <span class="rh-sub">
-                {{ selectedUnitBuildings.length ? `${selectedUnitBuildings.length} зд.` : 'нигде не нанимается' }}
+                {{ selectedUnitBuildings.length ? $t('recruit.buildings_count', { n: selectedUnitBuildings.length }) : $t('recruit.nowhere_hired') }}
               </span>
-              <button class="btn-add" @click="openPicker('addBuilding')">+ Добавить здание</button>
+              <button class="btn-add" @click="openPicker('addBuilding')">{{ $t('recruit.add_building') }}</button>
             </div>
 
             <div class="blocks-area">
@@ -410,14 +413,14 @@ async function pickUnit(unit) {
                   {{ entry.levelDisplay }}
                   <span v-if="entry.settlementType" :class="['bb-settle-tag', entry.settlementType]">{{ entry.settlementType }}</span>
                 </div>
-                <div class="bb-row"><span class="bb-key">Нач. пул</span><span class="bb-val">{{ entry.pool.InitialPool }}</span></div>
-                <div class="bb-row"><span class="bb-key">Пополнение</span><span class="bb-val">{{ entry.pool.ReplenishRate }}</span></div>
-                <div class="bb-row"><span class="bb-key">Макс. пул</span><span class="bb-val">{{ entry.pool.MaxPool }}</span></div>
-                <div class="bb-row"><span class="bb-key">Опыт</span><span class="bb-val">{{ entry.pool.ExpGained || '—' }}</span></div>
-                <button class="bb-del" title="Убрать" @click.stop="removeUnitFromBuilding(entry)">✕</button>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_initial_pool') }}</span><span class="bb-val">{{ entry.pool.InitialPool }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_replenish') }}</span><span class="bb-val">{{ entry.pool.ReplenishRate }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_max_pool') }}</span><span class="bb-val">{{ entry.pool.MaxPool }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_exp_gained') }}</span><span class="bb-val">{{ entry.pool.ExpGained || '—' }}</span></div>
+                <button class="bb-del" @click.stop="removeUnitFromBuilding(entry)">✕</button>
               </div>
               <div v-if="selectedUnitBuildings.length === 0" class="area-hint">
-                Юнит нигде не нанимается. Нажмите «+ Добавить здание».
+                {{ $t('recruit.unit_nowhere') }}
               </div>
             </div>
 
@@ -426,29 +429,29 @@ async function pickUnit(unit) {
               <div v-if="selectedEntry && !pickerMode" class="edit-panel">
                 <div class="ep-title">{{ selectedEntry.groupDisplay }} — {{ selectedEntry.levelDisplay }}</div>
                 <div class="ep-fields">
-                  <label>Нач. пул<input type="number" min="0" v-model.number="selectedEntry.pool.InitialPool" :disabled="saving" /></label>
-                  <label>Пополнение<input type="number" step="0.01" min="0" v-model.number="selectedEntry.pool.ReplenishRate" :disabled="saving" /></label>
-                  <label>Макс. пул<input type="number" min="0" v-model.number="selectedEntry.pool.MaxPool" :disabled="saving" /></label>
-                  <label>Опыт<input type="number" min="0" v-model.number="selectedEntry.pool.ExpGained" :disabled="saving" /></label>
-                  <label class="ep-wide">Условия<input v-model="selectedEntry.pool.Conditions" :disabled="saving" class="ep-cond" /></label>
-                  <button class="ep-save" :disabled="saving" @click="saveEntryPool(selectedEntry)">{{ saving ? '...' : 'Сохранить' }}</button>
+                  <label>{{ $t('recruit.field_initial_pool') }}<input type="number" min="0" v-model.number="selectedEntry.pool.InitialPool" :disabled="saving" /></label>
+                  <label>{{ $t('recruit.field_replenish') }}<input type="number" step="0.01" min="0" v-model.number="selectedEntry.pool.ReplenishRate" :disabled="saving" /></label>
+                  <label>{{ $t('recruit.field_max_pool') }}<input type="number" min="0" v-model.number="selectedEntry.pool.MaxPool" :disabled="saving" /></label>
+                  <label>{{ $t('recruit.field_exp_gained') }}<input type="number" min="0" v-model.number="selectedEntry.pool.ExpGained" :disabled="saving" /></label>
+                  <label class="ep-wide">{{ $t('recruit.field_conditions') }}<input v-model="selectedEntry.pool.Conditions" :disabled="saving" class="ep-cond" /></label>
+                  <button class="ep-save" :disabled="saving" @click="saveEntryPool(selectedEntry)">{{ saving ? '...' : $t('recruit.save') }}</button>
                   <span v-if="opError" class="ep-error">{{ opError }}</span>
                 </div>
               </div>
             </transition>
 
           </template>
-          <div v-else class="right-hint">Выберите юнита слева</div>
+          <div v-else class="right-hint">{{ $t('recruit.select_unit_hint') }}</div>
 
-          <!-- Пикер: добавить здание к юниту -->
+          <!-- Picker: add building to unit -->
           <transition name="picker-slide">
             <div v-if="pickerMode === 'addBuilding'" class="picker-overlay">
               <div class="picker-head">
-                <span class="picker-title">Выбрать здание</span>
+                <span class="picker-title">{{ $t('recruit.pick_building_title') }}</span>
                 <button class="picker-close" @click="closePicker">✕</button>
               </div>
               <div class="picker-search-row">
-                <input v-model="pickerSearch" class="recruit-search" placeholder="Поиск здания..." autofocus />
+                <input v-model="pickerSearch" class="recruit-search" :placeholder="$t('recruit.search_building')" autofocus />
               </div>
               <div class="picker-list">
                 <template v-if="pickerBuildings.length">
@@ -456,11 +459,11 @@ async function pickUnit(unit) {
                     <div class="pk-group-label">{{ grpName(item.group) }}</div>
                     <div v-for="level in item.levels" :key="level.Name" class="pk-item" @click="pickBuilding(item.group, level)">
                       <span class="pk-name">{{ bldName(level) }}</span>
-                      <span class="pk-meta">{{ level.Cost }} зол · {{ level.Construction }} ход.</span>
+                      <span class="pk-meta">{{ $t('recruit.cost_turns', { cost: level.Cost, turns: level.Construction }) }}</span>
                     </div>
                   </div>
                 </template>
-                <div v-else class="pk-empty">Нет доступных зданий</div>
+                <div v-else class="pk-empty">{{ $t('recruit.no_available_buildings') }}</div>
               </div>
             </div>
           </transition>
@@ -474,17 +477,17 @@ async function pickUnit(unit) {
         <!-- Левая панель: дерево зданий -->
         <div class="recruit-left">
           <div class="recruit-filters">
-            <input v-model="buildingSearch" class="recruit-search" placeholder="Поиск здания..." />
+            <input v-model="buildingSearch" class="recruit-search" :placeholder="$t('recruit.search_building')" />
             <select v-model="bldFactionFilter" class="recruit-select">
-              <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.DisplayName || f.Name }}</option>
+              <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.Name === 'all' ? $t('recruit.filter_all') : (f.DisplayName || f.Name) }}</option>
             </select>
             <div class="settle-tabs">
               <button
-                v-for="opt in [{ v: 'all', l: 'Все' }, { v: 'city', l: 'City' }, { v: 'castle', l: 'Castle' }]"
+                v-for="opt in [{ v: 'all', l: 'all' }, { v: 'city', l: 'City' }, { v: 'castle', l: 'Castle' }]"
                 :key="opt.v"
                 :class="['settle-tab', { active: settlementFilter === opt.v }]"
                 @click="settlementFilter = opt.v"
-              >{{ opt.l }}</button>
+              >{{ opt.v === 'all' ? $t('recruit.filter_all') : opt.l }}</button>
             </div>
           </div>
           <div class="bld-tree">
@@ -508,11 +511,11 @@ async function pickUnit(unit) {
                     <span class="bld-level-name">{{ bldName(level) }}</span>
                     <span v-if="level.SettlementType" class="bld-settle-badge">{{ level.SettlementType }}</span>
                   </div>
-                  <span class="bld-level-meta">{{ (level.RecruitPools ?? []).length }} юн.</span>
+                  <span class="bld-level-meta">{{ $t('recruit.units_count', { n: (level.RecruitPools ?? []).length }) }}</span>
                 </div>
               </div>
             </div>
-            <div v-if="filteredBuildings.length === 0" class="list-empty">Нет зданий</div>
+            <div v-if="filteredBuildings.length === 0" class="list-empty">{{ $t('recruit.no_buildings') }}</div>
           </div>
         </div>
 
@@ -524,9 +527,9 @@ async function pickUnit(unit) {
               <span class="rh-title">{{ bldName(selectedLevel) }}</span>
               <span class="rh-sub">
                 {{ grpName(selectedGroup) }} ·
-                {{ selectedLevelPools.length ? `${selectedLevelPools.length} юн.` : 'нет юнитов' }}
+                {{ selectedLevelPools.length ? $t('recruit.units_count', { n: selectedLevelPools.length }) : $t('recruit.no_units_short') }}
               </span>
-              <button class="btn-add" @click="openPicker('addUnit')">+ Добавить юнита</button>
+              <button class="btn-add" @click="openPicker('addUnit')">{{ $t('recruit.add_unit') }}</button>
             </div>
 
             <div class="blocks-area">
@@ -538,15 +541,15 @@ async function pickUnit(unit) {
               >
                 <div class="bb-group-label">{{ item.category }}</div>
                 <div class="bb-level-name">{{ item.unitName }}</div>
-                <div class="bb-row"><span class="bb-key">Нач. пул</span><span class="bb-val">{{ item.pool.InitialPool }}</span></div>
-                <div class="bb-row"><span class="bb-key">Пополнение</span><span class="bb-val">{{ item.pool.ReplenishRate }}</span></div>
-                <div class="bb-row"><span class="bb-key">Макс. пул</span><span class="bb-val">{{ item.pool.MaxPool }}</span></div>
-                <div class="bb-row"><span class="bb-key">Опыт</span><span class="bb-val">{{ item.pool.ExpGained || '—' }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_initial_pool') }}</span><span class="bb-val">{{ item.pool.InitialPool }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_replenish') }}</span><span class="bb-val">{{ item.pool.ReplenishRate }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_max_pool') }}</span><span class="bb-val">{{ item.pool.MaxPool }}</span></div>
+                <div class="bb-row"><span class="bb-key">{{ $t('recruit.field_exp_gained') }}</span><span class="bb-val">{{ item.pool.ExpGained || '—' }}</span></div>
                 <div v-if="item.pool.Conditions" class="bb-cond">{{ item.pool.Conditions }}</div>
-                <button class="bb-del" title="Убрать" :disabled="saving" @click.stop="removePool(item)">✕</button>
+                <button class="bb-del" :disabled="saving" @click.stop="removePool(item)">✕</button>
               </div>
               <div v-if="selectedLevelPools.length === 0" class="area-hint">
-                На этом уровне здания никто не нанимается.
+                {{ $t('recruit.no_units_at_level') }}
               </div>
             </div>
 
@@ -555,31 +558,31 @@ async function pickUnit(unit) {
               <div v-if="selectedPool && !pickerMode" class="edit-panel">
                 <div class="ep-title">{{ selectedPool.unitName }}</div>
                 <div class="ep-fields">
-                  <label>Нач. пул<input type="number" min="0" v-model.number="selectedPool.pool.InitialPool" :disabled="saving" /></label>
-                  <label>Пополнение<input type="number" step="0.01" min="0" v-model.number="selectedPool.pool.ReplenishRate" :disabled="saving" /></label>
-                  <label>Макс. пул<input type="number" min="0" v-model.number="selectedPool.pool.MaxPool" :disabled="saving" /></label>
-                  <label>Опыт<input type="number" min="0" v-model.number="selectedPool.pool.ExpGained" :disabled="saving" /></label>
-                  <label class="ep-wide">Условия<input v-model="selectedPool.pool.Conditions" :disabled="saving" class="ep-cond" /></label>
-                  <button class="ep-save" :disabled="saving" @click="savePoolEdit">{{ saving ? '...' : 'Сохранить' }}</button>
+                  <label>{{ $t('recruit.field_initial_pool') }}<input type="number" min="0" v-model.number="selectedPool.pool.InitialPool" :disabled="saving" /></label>
+                  <label>{{ $t('recruit.field_replenish') }}<input type="number" step="0.01" min="0" v-model.number="selectedPool.pool.ReplenishRate" :disabled="saving" /></label>
+                  <label>{{ $t('recruit.field_max_pool') }}<input type="number" min="0" v-model.number="selectedPool.pool.MaxPool" :disabled="saving" /></label>
+                  <label>{{ $t('recruit.field_exp_gained') }}<input type="number" min="0" v-model.number="selectedPool.pool.ExpGained" :disabled="saving" /></label>
+                  <label class="ep-wide">{{ $t('recruit.field_conditions') }}<input v-model="selectedPool.pool.Conditions" :disabled="saving" class="ep-cond" /></label>
+                  <button class="ep-save" :disabled="saving" @click="savePoolEdit">{{ saving ? '...' : $t('recruit.save') }}</button>
                   <span v-if="opError" class="ep-error">{{ opError }}</span>
                 </div>
               </div>
             </transition>
 
           </template>
-          <div v-else class="right-hint">Выберите уровень здания слева</div>
+          <div v-else class="right-hint">{{ $t('recruit.select_level_hint') }}</div>
 
-          <!-- Пикер: добавить юнита к уровню -->
+          <!-- Picker: add unit to level -->
           <transition name="picker-slide">
             <div v-if="pickerMode === 'addUnit'" class="picker-overlay">
               <div class="picker-head">
-                <span class="picker-title">Выбрать юнита</span>
+                <span class="picker-title">{{ $t('recruit.pick_unit_title') }}</span>
                 <button class="picker-close" @click="closePicker">✕</button>
               </div>
               <div class="picker-search-row">
-                <input v-model="pickerSearch" class="recruit-search" placeholder="Поиск юнита..." autofocus />
+                <input v-model="pickerSearch" class="recruit-search" :placeholder="$t('recruit.search_unit')" autofocus />
                 <select v-model="pickerFactionFilter" class="recruit-select">
-                  <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.DisplayName || f.Name }}</option>
+                  <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.Name === 'all' ? $t('recruit.filter_all') : (f.DisplayName || f.Name) }}</option>
                 </select>
               </div>
               <div class="picker-list">
@@ -587,7 +590,7 @@ async function pickUnit(unit) {
                   <div class="pk-name">{{ unit.Name || unit.Type }}</div>
                   <div class="pk-meta">{{ unit.Category }} · {{ unit.Class }}</div>
                 </div>
-                <div v-if="pickerUnits.length === 0" class="pk-empty">Нет доступных юнитов</div>
+                <div v-if="pickerUnits.length === 0" class="pk-empty">{{ $t('recruit.no_available_units') }}</div>
               </div>
             </div>
           </transition>

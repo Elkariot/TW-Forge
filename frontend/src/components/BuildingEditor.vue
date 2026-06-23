@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { GetBuildings, UpdateBuildingLevelProps, RevertBuildings, GetFactions } from '../../wailsjs/go/main/App'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const emit = defineEmits(['changed'])
 
@@ -15,25 +18,26 @@ const saving = ref(false)
 const error = ref(null)
 const search = ref('')
 
-const SETTLEMENT_OPTIONS = [
-  { value: '', label: '— нет ограничения —' },
-  { value: 'village', label: 'Деревня (village)' },
-  { value: 'town', label: 'Город (town)' },
-  { value: 'large_town', label: 'Большой город (large_town)' },
-  { value: 'city', label: 'Мегаполис (city)' },
-  { value: 'large_city', label: 'Большой мегаполис (large_city)' },
-  { value: 'huge_city', label: 'Огромный мегаполис (huge_city)' },
-]
+const SETTLEMENT_OPTIONS = computed(() => [
+  { value: '', label: t('building.settlement_none') },
+  { value: 'village', label: t('building.settlement_village') },
+  { value: 'town', label: t('building.settlement_town') },
+  { value: 'large_town', label: t('building.settlement_large_town') },
+  { value: 'city', label: t('building.settlement_city') },
+  { value: 'large_city', label: t('building.settlement_large_city') },
+  { value: 'huge_city', label: t('building.settlement_huge_city') },
+])
 
-// Шаблоны бонусов, сгруппированные по категориям
-const BONUS_TEMPLATES = [
-  { cat: 'Население',  items: ['happiness_bonus bonus ', 'law_bonus bonus ', 'population_health_bonus bonus ', 'population_growth_bonus bonus '] },
-  { cat: 'Экономика',  items: ['trade_base_income_bonus bonus ', 'farming_level bonus ', 'farming_level ', 'trade_fleet ', 'mine_resource '] },
-  { cat: 'Войска',     items: ['recruits_exp_bonus bonus ', 'recruits_morale_bonus bonus ', 'armour bonus ', 'weapon_simple bonus ', 'weapon_bladed bonus ', 'weapon_missile bonus ', 'upgrade_bodyguard ', 'siege_engineer', 'shipwright'] },
-  { cat: 'Укрепления', items: ['wall_level ', 'gate_strength ', 'gate_defences ', 'tower_level '] },
-  { cat: 'Дороги',     items: ['road_level ', 'paved_roads', 'highways'] },
-  { cat: 'Прочее',     items: ['stage_games ', 'stage_races ', 'agent spy 0 requires factions { }', 'agent diplomat 0 requires factions { }', 'agent assassin 0 requires factions { }'] },
-]
+// Bonus templates grouped by category — keys stay in English in code,
+// category names come from the i18n keys below (computed to be reactive)
+const BONUS_TEMPLATES = computed(() => [
+  { cat: 'Population',    items: ['happiness_bonus bonus ', 'law_bonus bonus ', 'population_health_bonus bonus ', 'population_growth_bonus bonus '] },
+  { cat: 'Economy',       items: ['trade_base_income_bonus bonus ', 'farming_level bonus ', 'farming_level ', 'trade_fleet ', 'mine_resource '] },
+  { cat: 'Military',      items: ['recruits_exp_bonus bonus ', 'recruits_morale_bonus bonus ', 'armour bonus ', 'weapon_simple bonus ', 'weapon_bladed bonus ', 'weapon_missile bonus ', 'upgrade_bodyguard ', 'siege_engineer', 'shipwright'] },
+  { cat: 'Fortifications',items: ['wall_level ', 'gate_strength ', 'gate_defences ', 'tower_level '] },
+  { cat: 'Roads',         items: ['road_level ', 'paved_roads', 'highways'] },
+  { cat: 'Other',         items: ['stage_games ', 'stage_races ', 'agent spy 0 requires factions { }', 'agent diplomat 0 requires factions { }', 'agent assassin 0 requires factions { }'] },
+])
 
 onMounted(async () => {
   ;[buildings.value, factions.value] = await Promise.all([GetBuildings(), GetFactions()])
@@ -262,19 +266,19 @@ async function revert() {
     <!-- Левая панель: дерево зданий -->
     <div class="be-tree">
       <div class="be-tree-header">
-        <input v-model="search" class="be-search" placeholder="Поиск зданий..." />
+        <input v-model="search" class="be-search" :placeholder="$t('building.search_placeholder')" />
         <select
           class="be-faction-select"
           :value="selectedFaction?.Name ?? ''"
           @change="e => selectedFaction = factions.find(f => f.Name === e.target.value) ?? null"
         >
-          <option value="">Все фракции</option>
+          <option value="">{{ $t('building.all_factions') }}</option>
           <option v-for="f in factions" :key="f.Name" :value="f.Name">
             {{ f.DisplayName || f.Name }}
           </option>
         </select>
         <button v-if="localDirty" class="be-revert-btn" @click="revert">
-          Отменить изменения
+          {{ $t('building.revert_changes') }}
         </button>
       </div>
 
@@ -289,7 +293,7 @@ async function revert() {
             @click="selectLevel(g, l)"
           >{{ lvlLabel(l) }}</button>
         </div>
-        <div v-if="filteredGroups.length === 0" class="be-empty">Ничего не найдено</div>
+        <div v-if="filteredGroups.length === 0" class="be-empty">{{ $t('building.nothing_found') }}</div>
       </div>
     </div>
 
@@ -305,10 +309,10 @@ async function revert() {
         <div class="be-toolbar">
           <span v-if="error" class="be-error">{{ error }}</span>
           <button v-if="localDirty" class="be-btn-save" :disabled="saving" @click="save">
-            {{ saving ? 'Сохранение...' : 'Сохранить' }}
+            {{ saving ? $t('building.saving') : $t('building.save') }}
           </button>
           <button v-if="localDirty" class="be-btn-cancel" @click="selectLevel(selectedGroup, selectedLevel)">
-            Отмена
+            {{ $t('common.cancel') }}
           </button>
         </div>
       </div>
@@ -317,18 +321,18 @@ async function revert() {
 
         <!-- Экономика -->
         <div class="be-section">
-          <h3>Экономика</h3>
+          <h3>{{ $t('building.section_economy') }}</h3>
           <div class="be-fields">
             <label class="be-field">
-              <span>Стоимость строительства</span>
+              <span>{{ $t('building.field_build_cost') }}</span>
               <input type="number" v-model.number="edited.cost" min="0" @input="markDirty" />
             </label>
             <label class="be-field">
-              <span>Ходов на строительство</span>
+              <span>{{ $t('building.field_build_turns') }}</span>
               <input type="number" v-model.number="edited.construction" min="0" @input="markDirty" />
             </label>
             <label class="be-field">
-              <span>Минимальный тип поселения</span>
+              <span>{{ $t('building.field_settlement_min') }}</span>
               <select v-model="edited.settlementMin" @change="markDirty">
                 <option v-for="opt in SETTLEMENT_OPTIONS" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
@@ -340,16 +344,16 @@ async function revert() {
 
         <!-- Доступно фракциям -->
         <div class="be-section">
-          <h3>Доступно фракциям</h3>
+          <h3>{{ $t('building.section_factions') }}</h3>
           <div class="be-chips">
-            <div v-if="edited.requiredCultures.length === 0" class="be-empty-hint">Все фракции</div>
+            <div v-if="edited.requiredCultures.length === 0" class="be-empty-hint">{{ $t('building.all_factions_label') }}</div>
             <div v-for="c in edited.requiredCultures" :key="c" class="be-chip">
               <span>{{ c }}</span>
               <button class="be-chip-del" @click="removeCulture(c)">✕</button>
             </div>
           </div>
           <select class="be-add-select" @change="e => { addCulture(e.target.value); e.target.value = '' }">
-            <option value="">+ Добавить культуру...</option>
+            <option value="">{{ $t('building.add_culture') }}</option>
             <option
               v-for="c in allCultures.filter(c => !edited.requiredCultures.includes(c))"
               :key="c" :value="c"
@@ -360,29 +364,29 @@ async function revert() {
         <!-- Зависимость от здания -->
         <div class="be-section">
           <h3>
-            Зависимость от здания
-            <button v-if="depChanged" class="be-inline-revert" @click="revertDep" title="Откатить">↺</button>
+            {{ $t('building.section_dependency') }}
+            <button v-if="depChanged" class="be-inline-revert" @click="revertDep" :title="$t('common.revert')">↺</button>
           </h3>
           <div class="be-fields">
             <label class="be-field">
-              <span>Группа зданий</span>
+              <span>{{ $t('building.field_dependency_group') }}</span>
               <select
                 class="be-dep-select"
                 :value="edited.dependencyGroup"
                 @change="e => { edited.dependencyGroup = e.target.value; edited.dependencyLevel = ''; markDirty() }"
               >
-                <option value="">— нет зависимости —</option>
+                <option value="">{{ $t('building.no_dependency') }}</option>
                 <option v-for="g in buildings" :key="g.Name" :value="g.Name">{{ g.Name }}</option>
               </select>
             </label>
             <label class="be-field" v-if="edited.dependencyGroup">
-              <span>Минимальный уровень</span>
+              <span>{{ $t('building.field_dependency_level') }}</span>
               <select
                 class="be-dep-select"
                 v-model="edited.dependencyLevel"
                 @change="markDirty"
               >
-                <option value="">— выберите уровень —</option>
+                <option value="">{{ $t('building.no_level') }}</option>
                 <option v-for="lvl in depGroupLevels" :key="lvl" :value="lvl">{{ lvl }}</option>
               </select>
             </label>
@@ -391,13 +395,13 @@ async function revert() {
 
         <!-- Бонусы capability -->
         <div class="be-section">
-          <h3>Бонусы (capability)</h3>
+          <h3>{{ $t('building.section_bonuses') }}</h3>
 
           <div class="be-bonus-list">
-            <div v-if="bonusItems.length === 0" class="be-empty-hint">Нет бонусов</div>
+            <div v-if="bonusItems.length === 0" class="be-empty-hint">{{ $t('building.no_bonuses') }}</div>
             <div v-for="(item, i) in bonusItems" :key="i" class="be-bonus-row">
               <div class="be-bonus-tag" :class="{ 'is-new': isNewBonus(item), 'is-modified': isModifiedBonus(item) }">
-                {{ isNewBonus(item) ? 'new' : isModifiedBonus(item) ? 'изм' : '' }}
+                {{ isNewBonus(item) ? 'new' : isModifiedBonus(item) ? 'mod' : '' }}
               </div>
               <input
                 :value="item.text"
@@ -408,12 +412,11 @@ async function revert() {
                 v-if="isModifiedBonus(item)"
                 class="be-bonus-action revert"
                 @click="revertBonus(item)"
-                title="Откатить к оригиналу"
+                :title="$t('common.revert')"
               >↺</button>
               <button
                 class="be-bonus-action remove"
                 @click="removeBonus(i)"
-                :title="isNewBonus(item) ? 'Удалить' : 'Убрать из файла'"
               >✕</button>
             </div>
           </div>
@@ -432,7 +435,7 @@ async function revert() {
                 class="be-tpl-toggle"
                 :class="{ active: showTemplates }"
                 @click="showTemplates = !showTemplates"
-                title="Шаблоны бонусов"
+                :title="$t('building.bonus_template_title')"
               >≡</button>
             </div>
 
@@ -455,9 +458,9 @@ async function revert() {
 
         <!-- Улучшения -->
         <div class="be-section">
-          <h3>Улучшения</h3>
+          <h3>{{ $t('building.section_upgrades') }}</h3>
           <div class="be-chips">
-            <div v-if="edited.upgrades.length === 0" class="be-empty-hint">Нет улучшений</div>
+            <div v-if="edited.upgrades.length === 0" class="be-empty-hint">{{ $t('building.no_upgrades') }}</div>
             <div v-for="upg in edited.upgrades" :key="upg" class="be-chip">
               <span>{{ upg }}</span>
               <button class="be-chip-del" @click="removeUpgrade(upg)">✕</button>
@@ -468,7 +471,7 @@ async function revert() {
               <input
                 v-model="newUpgrade"
                 class="be-upg-input"
-                placeholder="Имя уровня..."
+                :placeholder="$t('building.upgrade_placeholder')"
                 @keydown.enter="addUpgrade(newUpgrade.trim())"
                 @focus="upgradePickerOpen = true"
                 @blur="closeUpgradePicker"
@@ -493,7 +496,7 @@ async function revert() {
       <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40" style="opacity:0.2">
         <path d="M3 21h18v-2H3v2zM5 9.5v9.5h3V9.5H5zm5.5 0v9.5h3V9.5h-3zM16 9.5v9.5h3V9.5h-3zM2 7.5l10-5 10 5v1.5H2V7.5z"/>
       </svg>
-      <span>Выберите уровень здания</span>
+      <span>{{ $t('building.select_level') }}</span>
     </div>
 
   </div>

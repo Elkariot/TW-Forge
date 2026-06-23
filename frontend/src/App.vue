@@ -15,6 +15,14 @@ import BuildingEditor from './components/BuildingEditor.vue'
 import M2TWBuildingEditor from './components/M2TWBuildingEditor.vue'
 import M2TWRecruitEditor from './components/M2TWRecruitEditor.vue'
 import ThemePicker from './components/ThemePicker.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t, locale } = useI18n()
+
+function toggleLang() {
+  locale.value = locale.value === 'ru' ? 'en' : 'ru'
+  localStorage.setItem('tw-forge-lang', locale.value)
+}
 
 const screen = ref('setup') // 'setup' | 'editor'
 const gameVersion = ref(null) // 0 = Medieval, 1 = Rome
@@ -171,7 +179,7 @@ async function confirmCopy() {
     selectedUnitType.value = newType
     await checkChanges()
   } catch (e) {
-    applyError.value = `Ошибка копирования: ${e}`
+    applyError.value = t('app.copy_error', { err: e })
   }
 }
 
@@ -198,7 +206,7 @@ async function applyToGame() {
     <!-- Топбар -->
     <div class="topbar">
       <div class="topbar-left">
-        <button class="btn-back" @click="goBack" title="Вернуться к выбору игры">
+        <button class="btn-back" @click="goBack" :title="$t('app.back_title')">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
           </svg>
@@ -207,6 +215,7 @@ async function applyToGame() {
       </div>
       <div class="topbar-actions">
         <ThemePicker />
+        <button class="lang-switch" @click="toggleLang">{{ locale === 'ru' ? 'EN' : 'RU' }}</button>
         <span v-if="applyError" class="topbar-error">{{ applyError }}</span>
         <button
           class="btn-apply"
@@ -214,7 +223,7 @@ async function applyToGame() {
           :disabled="applying || !hasChanges"
           @click="applyToGame"
         >
-          {{ applying ? 'Запись...' : isApplied ? '✓ Применено' : 'Применить к игре' }}
+          {{ applying ? $t('app.applying') : isApplied ? $t('app.applied') : $t('app.apply_to_game') }}
         </button>
       </div>
     </div>
@@ -223,17 +232,17 @@ async function applyToGame() {
 
     <!-- Nav Rail -->
     <nav class="nav-rail">
-      <button class="nav-btn" :class="{ active: activeTab === 'units' }" title="Юниты" @click="activeTab = 'units'">
+      <button class="nav-btn" :class="{ active: activeTab === 'units' }" :title="$t('app.nav_units')" @click="activeTab = 'units'">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0H5z"/>
         </svg>
       </button>
-      <button class="nav-btn" :class="{ active: activeTab === 'buildings' }" title="Здания" @click="activeTab = 'buildings'">
+      <button class="nav-btn" :class="{ active: activeTab === 'buildings' }" :title="$t('app.nav_buildings')" @click="activeTab = 'buildings'">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M3 21h18v-2H3v2zM5 9.5v9.5h3V9.5H5zm5.5 0v9.5h3V9.5h-3zM16 9.5v9.5h3V9.5h-3zM2 7.5l10-5 10 5v1.5H2V7.5z"/>
         </svg>
       </button>
-      <button class="nav-btn" :class="{ active: activeTab === 'recruit' }" title="Найм" @click="activeTab = 'recruit'">
+      <button class="nav-btn" :class="{ active: activeTab === 'recruit' }" :title="$t('app.nav_recruit')" @click="activeTab = 'recruit'">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M12 1L3 5v6c0 5.5 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
         </svg>
@@ -245,7 +254,7 @@ async function applyToGame() {
 
     <!-- Фракции -->
     <aside class="sidebar">
-      <h2>Фракции</h2>
+      <h2>{{ $t('app.factions') }}</h2>
       <ul>
         <li
           v-for="faction in factions"
@@ -267,12 +276,10 @@ async function applyToGame() {
             class="toggle-deleted-btn"
             :class="{ active: showDeleted }"
             @click="toggleShowDeleted"
-            title="Показать удалённых юнитов"
           >🗑</button>
           <button
             class="unit-add-btn"
             @click="showCreateModal = true"
-            title="Добавить юнита"
           >+</button>
         </div>
       </div>
@@ -281,12 +288,12 @@ async function applyToGame() {
           v-model="unitSearch"
           class="unit-search"
           type="text"
-          placeholder="Поиск юнитов..."
+          :placeholder="$t('app.unit_search')"
         />
         <button v-if="unitSearch" class="unit-search-clear" @click="unitSearch = ''" title="Очистить">✕</button>
       </div>
       <div v-if="unitSearch && Object.keys(filteredUnitGroups).length === 0" class="unit-search-empty">
-        Ничего не найдено
+        {{ $t('app.nothing_found') }}
       </div>
       <div v-for="(classes, category) in filteredUnitGroups" :key="category" class="category">
         <h3>{{ category }}</h3>
@@ -300,7 +307,7 @@ async function applyToGame() {
               @click="selectUnit(unit)"
             >
               <span class="unit-name">{{ unit.Name || unit.Type }}</span>
-              <button class="unit-copy-btn" @click.stop="openCopyDialog(unit)" title="Копировать юнит">⧉</button>
+              <button class="unit-copy-btn" @click.stop="openCopyDialog(unit)">⧉</button>
             </li>
           </ul>
         </div>
@@ -308,7 +315,7 @@ async function applyToGame() {
 
       <!-- Удалённые юниты -->
       <div v-if="showDeleted && deletedUnits.length > 0" class="category deleted-section">
-        <h3>Удалённые</h3>
+        <h3>{{ $t('app.deleted_units') }}</h3>
         <ul class="class-group">
           <li
             v-for="unit in deletedUnits"
@@ -322,11 +329,11 @@ async function applyToGame() {
         </ul>
       </div>
       <div v-else-if="showDeleted && deletedUnits.length === 0" class="deleted-empty">
-        Нет удалённых юнитов
+        {{ $t('app.no_deleted') }}
       </div>
     </div>
     <div class="unit-list hint-panel" v-else>
-      <p class="hint">Выберите фракцию слева</p>
+      <p class="hint">{{ $t('app.select_faction') }}</p>
     </div>
 
     <!-- Детали юнита -->
@@ -381,17 +388,17 @@ async function applyToGame() {
   <!-- Диалог копирования юнита -->
   <div v-if="copyDialog" class="copy-overlay" @click.self="copyDialog = null">
     <div class="copy-modal">
-      <div class="copy-modal-title">Копировать юнит</div>
+      <div class="copy-modal-title">{{ $t('app.copy_unit_title') }}</div>
       <div class="copy-modal-unit">{{ copyDialog.unit.Name || copyDialog.unit.Type }}</div>
-      <label class="copy-modal-label">Скопировать во фракцию</label>
+      <label class="copy-modal-label">{{ $t('app.copy_to_faction') }}</label>
       <select v-model="copyTargetFaction" class="copy-modal-select">
         <option v-for="f in factions" :key="f.Name" :value="f.Name">
           {{ f.DisplayName || f.Name }}
         </option>
       </select>
       <div class="copy-modal-actions">
-        <button class="copy-btn-confirm" @click="confirmCopy">Копировать</button>
-        <button class="copy-btn-cancel" @click="copyDialog = null">Отмена</button>
+        <button class="copy-btn-confirm" @click="confirmCopy">{{ $t('app.copy_confirm') }}</button>
+        <button class="copy-btn-cancel" @click="copyDialog = null">{{ $t('common.cancel') }}</button>
       </div>
     </div>
   </div>
@@ -417,6 +424,19 @@ body { font-family: sans-serif; background: var(--color-bg); color: var(--color-
 .topbar-left { display: flex; align-items: center; gap: 8px; }
 .topbar-title { font-size: 13px; font-weight: 600; color: var(--color-text-dim); }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
+.lang-switch {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  cursor: pointer;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  transition: background 0.15s;
+}
+.lang-switch:hover { background: var(--color-cell); color: var(--color-text); }
 .topbar-error { font-size: 12px; color: var(--color-error); }
 .btn-back {
   background: transparent;

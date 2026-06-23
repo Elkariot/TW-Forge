@@ -12,6 +12,9 @@ import {
   DISCIPLINE_VALUES, TRAINING_VALUES, UNIT_ATTRIBUTES, WEAPON_ATTRIBUTES,
   FORMATION_PRIMARY, FORMATION_SECONDARY,
 } from '../enums.js'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps(['unitType', 'faction'])
 const emit = defineEmits(['saved', 'reverted', 'deleted', 'restored'])
@@ -61,7 +64,7 @@ watch(() => props.unitType, async (type) => {
     dirty.value = false
   } catch (e) {
     if (props.unitType !== type) return
-    error.value = `Ошибка загрузки юнита "${type}": ${e}`
+    error.value = t('unit.load_error', { type, err: e })
     unit.value = null
     edited.value = null
   }
@@ -200,9 +203,7 @@ async function deleteUnit() {
   const isCopy = await IsCopyUnit(type)
 
   if (isCopy) {
-    const choice = window.confirm(
-      `"${type}" — копия юнита.\n\nОК = Полное удаление (убрать из EDU + удалить иконки)\nОтмена = Удалить только из фракции "${props.faction}"`
-    )
+    const choice = window.confirm(t('unit.confirm_delete_copy', { type, faction: props.faction }))
     try {
       if (choice) {
         await HardDeleteM2TWUnit(type)
@@ -218,8 +219,8 @@ async function deleteUnit() {
 
   const isNew = unitChangeType.value === 'added'
   const msg = isNew
-    ? `Удалить созданный юнит "${type}"?`
-    : `Удалить юнит "${type}" из фракции "${props.faction}"? Если фракция последняя — юнит будет помечен удалённым.`
+    ? t('unit.confirm_delete_new', { type })
+    : t('unit.confirm_delete_faction', { type, faction: props.faction })
   if (!confirm(msg)) return
   try {
     await DeleteM2TWUnit(type, props.faction)
@@ -309,11 +310,11 @@ async function removeFromBuilding(loc) {
           </div>
           <div class="toolbar">
             <template v-if="dirty">
-              <button class="btn-save" :disabled="saving" @click="save">{{ saving ? '...' : 'Сохранить' }}</button>
-              <button class="btn-cancel" @click="cancel">Отмена</button>
+              <button class="btn-save" :disabled="saving" @click="save">{{ saving ? '...' : $t('unit.btn_save') }}</button>
+              <button class="btn-cancel" @click="cancel">{{ $t('unit.btn_cancel') }}</button>
             </template>
             <button v-if="unitChangeType === 'deleted'" class="btn-restore" @click="restoreUnit">↺</button>
-            <button v-else class="btn-delete" @click="deleteUnit" :title="unitChangeType === 'added' ? 'Удалить копию' : 'Удалить юнит'">✕</button>
+            <button v-else class="btn-delete" @click="deleteUnit" :title="unitChangeType === 'added' ? $t('unit.btn_delete_copy') : $t('unit.btn_delete_unit')">✕</button>
             <span v-if="error" class="error">{{ error }}</span>
           </div>
         </div>
@@ -324,78 +325,78 @@ async function removeFromBuilding(loc) {
 
         <!-- Описание -->
         <section class="stat-section">
-          <h3>Описание</h3>
+          <h3>{{ $t('unit.section_description') }}</h3>
           <div class="grid">
-            <label class="full">Название<input v-model="edited.Name" @input="markDirty" /></label>
-            <label class="full">Краткое описание<textarea v-model="edited.DescrShort" @input="markDirty" rows="2" class="desc-textarea" /></label>
-            <label class="full">Полное описание<textarea v-model="edited.Descr" @input="markDirty" rows="4" class="desc-textarea" /></label>
+            <label class="full">{{ $t('unit.field_name') }}<input v-model="edited.Name" @input="markDirty" /></label>
+            <label class="full">{{ $t('unit.field_descr_short') }}<textarea v-model="edited.DescrShort" @input="markDirty" rows="2" class="desc-textarea" /></label>
+            <label class="full">{{ $t('unit.field_descr_full') }}<textarea v-model="edited.Descr" @input="markDirty" rows="4" class="desc-textarea" /></label>
           </div>
         </section>
 
         <!-- Основное -->
         <section class="stat-section">
-          <h3>Основное</h3>
+          <h3>{{ $t('unit.section_main') }}</h3>
           <div class="grid">
-            <label>Тип<input v-model="edited.Type" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_type') }}<input v-model="edited.Type" @input="markDirty" /></label>
             <label>Dictionary<input v-model="edited.Dictionary" @input="markDirty" /></label>
-            <label>Категория
+            <label>{{ $t('unit.field_category') }}
               <select v-model="edited.Category" @change="markDirty">
                 <option v-for="v in UNIT_CATEGORIES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Класс
+            <label>{{ $t('unit.field_class') }}
               <select v-model="edited.Class" @change="markDirty">
                 <option v-for="v in UNIT_CLASSES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Голос
+            <label>{{ $t('unit.field_voice') }}
               <select v-model="edited.VoiceType" @change="markDirty">
                 <option v-if="edited.VoiceType && !VOICE_TYPES.includes(edited.VoiceType)" :value="edited.VoiceType">{{ edited.VoiceType }}</option>
                 <option v-for="v in VOICE_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Акцент<input v-model="edited.Accent" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_accent') }}<input v-model="edited.Accent" @input="markDirty" /></label>
             <label>Banner Faction<input v-model="edited.BannerFaction" @input="markDirty" /></label>
             <label>Banner Holy<input v-model="edited.BannerHoly" @input="markDirty" /></label>
-            <label v-if="edited.Mount || edited.Category === 'cavalry'">Маунт<input v-model="edited.Mount" @input="markDirty" /></label>
-            <label v-if="edited.Mount || edited.MountEffect || edited.Category === 'cavalry'">Эффект маунта<input v-model="edited.MountEffect" @input="markDirty" /></label>
-            <label>Скорость (мод)<input type="number" step="0.01" v-model.number="edited.MoveSpeedMod" @input="markDirty" /></label>
+            <label v-if="edited.Mount || edited.Category === 'cavalry'">{{ $t('unit.field_mount') }}<input v-model="edited.Mount" @input="markDirty" /></label>
+            <label v-if="edited.Mount || edited.MountEffect || edited.Category === 'cavalry'">{{ $t('unit.field_mount_effect') }}<input v-model="edited.MountEffect" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_speed_mod') }}<input type="number" step="0.01" v-model.number="edited.MoveSpeedMod" @input="markDirty" /></label>
 
             <!-- Офицеры -->
             <div class="full attr-group">
-              <div class="attr-label">Офицеры</div>
+              <div class="attr-label">{{ $t('unit.field_officers') }}</div>
               <div v-for="(o, idx) in (edited.Officers ?? [])" :key="idx" class="officer-row">
                 <input :value="o" @input="e => setOfficer(idx, e.target.value)" class="officer-input" />
                 <button class="officer-remove" @click="removeOfficer(idx)">✕</button>
               </div>
-              <button class="btn-small-add" @click="addOfficer">+ Офицер</button>
+              <button class="btn-small-add" @click="addOfficer">+ {{ $t('unit.field_officers') }}</button>
             </div>
 
             <!-- Строй -->
             <div class="full formation-group">
-              <div class="attr-label">Строй</div>
+              <div class="attr-label">{{ $t('unit.field_formation') }}</div>
               <div class="formation-pairs">
                 <div class="formation-pair">
-                  <div class="formation-pair-title">Тесный</div>
+                  <div class="formation-pair-title">{{ $t('unit.field_formation_tight') }}</div>
                   <div class="formation-pair-inputs">
-                    <label>Шир.<input type="number" step="0.1" :value="getFormationNum(0)" @change="e => setFormationNum(0, e.target.value)" /></label>
-                    <label>Гл.<input type="number" step="0.1" :value="getFormationNum(1)" @change="e => setFormationNum(1, e.target.value)" /></label>
+                    <label>{{ $t('unit.field_formation_width') }}<input type="number" step="0.1" :value="getFormationNum(0)" @change="e => setFormationNum(0, e.target.value)" /></label>
+                    <label>{{ $t('unit.field_formation_depth') }}<input type="number" step="0.1" :value="getFormationNum(1)" @change="e => setFormationNum(1, e.target.value)" /></label>
                   </div>
                 </div>
                 <div class="formation-pair">
-                  <div class="formation-pair-title">Свободный</div>
+                  <div class="formation-pair-title">{{ $t('unit.field_formation_loose') }}</div>
                   <div class="formation-pair-inputs">
-                    <label>Шир.<input type="number" step="0.1" :value="getFormationNum(2)" @change="e => setFormationNum(2, e.target.value)" /></label>
-                    <label>Гл.<input type="number" step="0.1" :value="getFormationNum(3)" @change="e => setFormationNum(3, e.target.value)" /></label>
+                    <label>{{ $t('unit.field_formation_width') }}<input type="number" step="0.1" :value="getFormationNum(2)" @change="e => setFormationNum(2, e.target.value)" /></label>
+                    <label>{{ $t('unit.field_formation_depth') }}<input type="number" step="0.1" :value="getFormationNum(3)" @change="e => setFormationNum(3, e.target.value)" /></label>
                   </div>
                 </div>
-                <label class="formation-single">Макс. гл.<input type="number" step="1" :value="getFormationNum(4)" @change="e => setFormationNum(4, e.target.value)" /></label>
-                <label class="formation-select">Тип строя
+                <label class="formation-single">{{ $t('unit.field_formation_max_depth') }}<input type="number" step="1" :value="getFormationNum(4)" @change="e => setFormationNum(4, e.target.value)" /></label>
+                <label class="formation-select">{{ $t('unit.field_formation_type') }}
                   <select :value="getFormationPrimary()" @change="e => setFormationPrimary(e.target.value)">
                     <option v-for="v in FORMATION_PRIMARY" :key="v" :value="v">{{ v }}</option>
                   </select>
                 </label>
-                <label class="formation-select">Доп. строй
+                <label class="formation-select">{{ $t('unit.field_formation_secondary') }}
                   <select :value="getFormationSecondary()" @change="e => setFormationSecondary(e.target.value)">
                     <option v-for="v in FORMATION_SECONDARY" :key="v" :value="v">{{ v || '—' }}</option>
                   </select>
@@ -405,7 +406,7 @@ async function removeFromBuilding(loc) {
 
             <!-- Атрибуты -->
             <div class="full attr-group">
-              <div class="attr-label">Атрибуты</div>
+              <div class="attr-label">{{ $t('unit.field_attributes') }}</div>
               <input type="text" readonly class="attr-display" :value="(edited.Attributes ?? []).join(', ') || '—'" />
               <div class="attr-list">
                 <label v-for="attr in UNIT_ATTRIBUTES" :key="attr.key" class="attr-check">
@@ -419,61 +420,61 @@ async function removeFromBuilding(loc) {
 
         <!-- Солдаты -->
         <section class="stat-section">
-          <h3>Солдаты</h3>
+          <h3>{{ $t('unit.section_soldiers') }}</h3>
           <div class="grid">
-            <label>Модель<input v-model="edited.Soldier.Model" @input="markDirty" /></label>
-            <label>Кол-во<input type="number" v-model.number="edited.Soldier.Count" @input="markDirty" /></label>
-            <label>Доп.<input type="number" v-model.number="edited.Soldier.Extras" @input="markDirty" /></label>
-            <label>Масса<input type="number" step="0.1" v-model.number="edited.Soldier.Mass" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_model') }}<input v-model="edited.Soldier.Model" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_count') }}<input type="number" v-model.number="edited.Soldier.Count" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_extras') }}<input type="number" v-model.number="edited.Soldier.Extras" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_mass') }}<input type="number" step="0.1" v-model.number="edited.Soldier.Mass" @input="markDirty" /></label>
           </div>
         </section>
 
         <!-- Здоровье -->
         <section class="stat-section">
-          <h3>Здоровье</h3>
+          <h3>{{ $t('unit.section_health') }}</h3>
           <div class="grid">
-            <label>HP<input type="number" v-model.number="edited.StatHealth[0]" @input="markDirty" /></label>
-            <label>Бонус HP<input type="number" v-model.number="edited.StatHealth[1]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_hp') }}<input type="number" v-model.number="edited.StatHealth[0]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_hp_bonus') }}<input type="number" v-model.number="edited.StatHealth[1]" @input="markDirty" /></label>
           </div>
         </section>
 
         <!-- Основное оружие -->
         <section class="stat-section">
-          <h3>Основное оружие</h3>
+          <h3>{{ $t('unit.section_primary_weapon') }}</h3>
           <div class="grid">
-            <label>Атака<input type="number" v-model.number="edited.StatPri.Attack" @input="markDirty" /></label>
-            <label>Заряд<input type="number" v-model.number="edited.StatPri.ChargeBonus" @input="markDirty" /></label>
-            <label>Снаряд
+            <label>{{ $t('unit.field_attack') }}<input type="number" v-model.number="edited.StatPri.Attack" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_charge') }}<input type="number" v-model.number="edited.StatPri.ChargeBonus" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_missile') }}
               <select v-model="edited.StatPri.Missile" @change="markDirty">
                 <option v-for="v in projectileTypes" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Дальность<input type="number" v-model.number="edited.StatPri.Range" @input="markDirty" /></label>
-            <label>Боезапас<input type="number" v-model.number="edited.StatPri.Ammo" @input="markDirty" /></label>
-            <label>Тип оружия
+            <label>{{ $t('unit.field_range') }}<input type="number" v-model.number="edited.StatPri.Range" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_ammo') }}<input type="number" v-model.number="edited.StatPri.Ammo" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_weapon_type') }}
               <select v-model="edited.StatPri.WeaponType" @change="markDirty">
                 <option v-for="v in WEAPON_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Тех. тип
+            <label>{{ $t('unit.field_tech_type') }}
               <select v-model="edited.StatPri.TechType" @change="markDirty">
                 <option v-for="v in TECH_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Тип урона
+            <label>{{ $t('unit.field_damage_type') }}
               <select v-model="edited.StatPri.DamageType" @change="markDirty">
                 <option v-for="v in DAMAGE_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Звук
+            <label>{{ $t('unit.field_sound') }}
               <select v-model="edited.StatPri.SoundType" @change="markDirty">
                 <option v-for="v in SOUND_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Задержка<input type="number" step="0.1" v-model.number="edited.StatPri.MinDelay" @input="markDirty" /></label>
-            <label>Фактор<input type="number" step="0.1" v-model.number="edited.StatPri.Factor" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_delay') }}<input type="number" step="0.1" v-model.number="edited.StatPri.MinDelay" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_factor') }}<input type="number" step="0.1" v-model.number="edited.StatPri.Factor" @input="markDirty" /></label>
             <div class="full attr-group">
-              <div class="attr-label">Атрибуты оружия</div>
+              <div class="attr-label">{{ $t('unit.field_weapon_attributes') }}</div>
               <input type="text" readonly class="attr-display" :value="(edited.StatPriAttr ?? []).filter(a => a !== 'no').join(', ') || '—'" />
               <div class="attr-list">
                 <label v-for="attr in WEAPON_ATTRIBUTES" :key="attr.key" class="attr-check">
@@ -481,7 +482,7 @@ async function removeFromBuilding(loc) {
                   {{ attr.label }}
                 </label>
                 <label class="attr-check spear-bonus-row">
-                  <span>Бонус vs конницы <span class="attr-key">(spear_bonus)</span></span>
+                  <span>{{ $t('unit.field_spear_bonus') }} <span class="attr-key">(spear_bonus)</span></span>
                   <input type="number" min="0" max="20" step="1" class="spear-bonus-input" :value="getSpearBonus('StatPriAttr')" @change="e => setSpearBonus('StatPriAttr', Number(e.target.value))" />
                 </label>
               </div>
@@ -491,41 +492,41 @@ async function removeFromBuilding(loc) {
 
         <!-- Вторичное оружие -->
         <section class="stat-section">
-          <h3>Вторичное оружие</h3>
+          <h3>{{ $t('unit.section_secondary_weapon') }}</h3>
           <div class="grid">
-            <label>Атака<input type="number" v-model.number="edited.StatSec.Attack" @input="markDirty" /></label>
-            <label>Заряд<input type="number" v-model.number="edited.StatSec.ChargeBonus" @input="markDirty" /></label>
-            <label>Снаряд
+            <label>{{ $t('unit.field_attack') }}<input type="number" v-model.number="edited.StatSec.Attack" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_charge') }}<input type="number" v-model.number="edited.StatSec.ChargeBonus" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_missile') }}
               <select v-model="edited.StatSec.Missile" @change="markDirty">
                 <option v-for="v in projectileTypes" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Дальность<input type="number" v-model.number="edited.StatSec.Range" @input="markDirty" /></label>
-            <label>Боезапас<input type="number" v-model.number="edited.StatSec.Ammo" @input="markDirty" /></label>
-            <label>Тип оружия
+            <label>{{ $t('unit.field_range') }}<input type="number" v-model.number="edited.StatSec.Range" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_ammo') }}<input type="number" v-model.number="edited.StatSec.Ammo" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_weapon_type') }}
               <select v-model="edited.StatSec.WeaponType" @change="markDirty">
                 <option v-for="v in WEAPON_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Тех. тип
+            <label>{{ $t('unit.field_tech_type') }}
               <select v-model="edited.StatSec.TechType" @change="markDirty">
                 <option v-for="v in TECH_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Тип урона
+            <label>{{ $t('unit.field_damage_type') }}
               <select v-model="edited.StatSec.DamageType" @change="markDirty">
                 <option v-for="v in DAMAGE_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Звук
+            <label>{{ $t('unit.field_sound') }}
               <select v-model="edited.StatSec.SoundType" @change="markDirty">
                 <option v-for="v in SOUND_TYPES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Задержка<input type="number" step="0.1" v-model.number="edited.StatSec.MinDelay" @input="markDirty" /></label>
-            <label>Фактор<input type="number" step="0.1" v-model.number="edited.StatSec.Factor" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_delay') }}<input type="number" step="0.1" v-model.number="edited.StatSec.MinDelay" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_factor') }}<input type="number" step="0.1" v-model.number="edited.StatSec.Factor" @input="markDirty" /></label>
             <div class="full attr-group">
-              <div class="attr-label">Атрибуты оружия</div>
+              <div class="attr-label">{{ $t('unit.field_weapon_attributes') }}</div>
               <input type="text" readonly class="attr-display" :value="(edited.StatSecAttr ?? []).filter(a => a !== 'no').join(', ') || '—'" />
               <div class="attr-list">
                 <label v-for="attr in WEAPON_ATTRIBUTES" :key="attr.key" class="attr-check">
@@ -533,7 +534,7 @@ async function removeFromBuilding(loc) {
                   {{ attr.label }}
                 </label>
                 <label class="attr-check spear-bonus-row">
-                  <span>Бонус vs конницы <span class="attr-key">(spear_bonus)</span></span>
+                  <span>{{ $t('unit.field_spear_bonus') }} <span class="attr-key">(spear_bonus)</span></span>
                   <input type="number" min="0" max="20" step="1" class="spear-bonus-input" :value="getSpearBonus('StatSecAttr')" @change="e => setSpearBonus('StatSecAttr', Number(e.target.value))" />
                 </label>
               </div>
@@ -543,19 +544,19 @@ async function removeFromBuilding(loc) {
 
         <!-- Броня -->
         <section class="stat-section">
-          <h3>Броня</h3>
+          <h3>{{ $t('unit.section_armour') }}</h3>
           <div class="grid">
-            <label>Броня (осн.)<input type="number" v-model.number="edited.StatPriArmour.Armour" @input="markDirty" /></label>
-            <label>Защита<input type="number" v-model.number="edited.StatPriArmour.DefSkill" @input="markDirty" /></label>
-            <label>Щит<input type="number" v-model.number="edited.StatPriArmour.Shield" @input="markDirty" /></label>
-            <label>Звук брони
+            <label>{{ $t('unit.field_armour_primary') }}<input type="number" v-model.number="edited.StatPriArmour.Armour" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_def_skill') }}<input type="number" v-model.number="edited.StatPriArmour.DefSkill" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_shield') }}<input type="number" v-model.number="edited.StatPriArmour.Shield" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_armour_sound') }}
               <select v-model="edited.StatPriArmour.Sound" @change="markDirty">
                 <option v-for="v in ARMOUR_SOUNDS" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Броня (доп.)<input type="number" v-model.number="edited.StatSecArmour.Armour" @input="markDirty" /></label>
-            <label>Защита (доп.)<input type="number" v-model.number="edited.StatSecArmour.DefSkill" @input="markDirty" /></label>
-            <label>Звук (доп.)
+            <label>{{ $t('unit.field_armour_secondary') }}<input type="number" v-model.number="edited.StatSecArmour.Armour" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_def_skill_secondary') }}<input type="number" v-model.number="edited.StatSecArmour.DefSkill" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_sound_secondary') }}
               <select v-model="edited.StatSecArmour.Sound" @change="markDirty">
                 <option v-for="v in ARMOUR_SOUNDS" :key="v" :value="v">{{ v }}</option>
               </select>
@@ -570,41 +571,41 @@ async function removeFromBuilding(loc) {
 
         <!-- Прочие статы -->
         <section class="stat-section">
-          <h3>Прочее</h3>
+          <h3>{{ $t('unit.section_misc') }}</h3>
           <div class="grid">
-            <label>Жара<input type="number" v-model.number="edited.StatHeat" @input="markDirty" /></label>
-            <label>Кустарник<input type="number" v-model.number="edited.StatGround[0]" @input="markDirty" /></label>
-            <label>Песок<input type="number" v-model.number="edited.StatGround[1]" @input="markDirty" /></label>
-            <label>Лес<input type="number" v-model.number="edited.StatGround[2]" @input="markDirty" /></label>
-            <label>Снег<input type="number" v-model.number="edited.StatGround[3]" @input="markDirty" /></label>
-            <label>Мораль<input type="number" v-model.number="edited.StatMental.Morale" @input="markDirty" /></label>
-            <label>Дисциплина
+            <label>{{ $t('unit.field_heat') }}<input type="number" v-model.number="edited.StatHeat" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_scrub') }}<input type="number" v-model.number="edited.StatGround[0]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_sand') }}<input type="number" v-model.number="edited.StatGround[1]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_forest') }}<input type="number" v-model.number="edited.StatGround[2]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_snow') }}<input type="number" v-model.number="edited.StatGround[3]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_morale') }}<input type="number" v-model.number="edited.StatMental.Morale" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_discipline') }}
               <select v-model="edited.StatMental.Discipline" @change="markDirty">
                 <option v-for="v in DISCIPLINE_VALUES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Тренировка
+            <label>{{ $t('unit.field_training') }}
               <select v-model="edited.StatMental.Training" @change="markDirty">
                 <option v-for="v in TRAINING_VALUES" :key="v" :value="v">{{ v }}</option>
               </select>
             </label>
-            <label>Дист. заряда<input type="number" v-model.number="edited.StatChargeDist" @input="markDirty" /></label>
-            <label>Задержка огня<input type="number" v-model.number="edited.StatFireDelay" @input="markDirty" /></label>
-            <label>Еда (осн.)<input type="number" v-model.number="edited.StatFood[0]" @input="markDirty" /></label>
-            <label>Еда (доп.)<input type="number" v-model.number="edited.StatFood[1]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_charge_dist') }}<input type="number" v-model.number="edited.StatChargeDist" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_fire_delay') }}<input type="number" v-model.number="edited.StatFireDelay" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_food_primary') }}<input type="number" v-model.number="edited.StatFood[0]" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_food_secondary') }}<input type="number" v-model.number="edited.StatFood[1]" @input="markDirty" /></label>
           </div>
         </section>
 
         <!-- Стоимость -->
         <section class="stat-section">
-          <h3>Стоимость</h3>
+          <h3>{{ $t('unit.section_cost') }}</h3>
           <div class="grid">
-            <label>Ходов<input type="number" v-model.number="edited.StatCost.Turns" @input="markDirty" /></label>
-            <label>Цена<input type="number" v-model.number="edited.StatCost.Cost" @input="markDirty" /></label>
-            <label>Содержание<input type="number" v-model.number="edited.StatCost.Upkeep" @input="markDirty" /></label>
-            <label>Улучш. оружие<input type="number" v-model.number="edited.StatCost.WeaponUpgrade" @input="markDirty" /></label>
-            <label>Улучш. броня<input type="number" v-model.number="edited.StatCost.ArmourUpgrade" @input="markDirty" /></label>
-            <label>Кастом<input type="number" v-model.number="edited.StatCost.Custom" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_turns') }}<input type="number" v-model.number="edited.StatCost.Turns" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_cost') }}<input type="number" v-model.number="edited.StatCost.Cost" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_upkeep') }}<input type="number" v-model.number="edited.StatCost.Upkeep" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_weapon_upgrade') }}<input type="number" v-model.number="edited.StatCost.WeaponUpgrade" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_armour_upgrade') }}<input type="number" v-model.number="edited.StatCost.ArmourUpgrade" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_custom') }}<input type="number" v-model.number="edited.StatCost.Custom" @input="markDirty" /></label>
             <label>Extra 1<input type="number" v-model.number="edited.StatCost.Extra1" @input="markDirty" /></label>
             <label>Extra 2<input type="number" v-model.number="edited.StatCost.Extra2" @input="markDirty" /></label>
           </div>
@@ -612,16 +613,16 @@ async function removeFromBuilding(loc) {
 
         <!-- Найм / Приоритет -->
         <section class="stat-section">
-          <h3>Найм</h3>
+          <h3>{{ $t('unit.section_recruit') }}</h3>
           <div class="grid">
-            <label>Приоритет найма<input type="number" v-model.number="edited.RecruitPriorityOffset" @input="markDirty" /></label>
+            <label>{{ $t('unit.field_recruit_priority') }}<input type="number" v-model.number="edited.RecruitPriorityOffset" @input="markDirty" /></label>
             <label>info_pic_dir<input v-model="edited.InfoPicDir" @input="markDirty" /></label>
           </div>
         </section>
 
         <!-- Фракции (ownership) -->
         <section class="stat-section">
-          <h3>Фракции (ownership)</h3>
+          <h3>{{ $t('unit.section_factions_ownership') }}</h3>
           <div class="ownership-chips">
             <span v-for="f in edited.Ownership" :key="f" class="chip">
               {{ f }}
@@ -629,7 +630,7 @@ async function removeFromBuilding(loc) {
             </span>
           </div>
           <select v-if="allFactions.length" class="faction-add-select" @change="e => { addFaction(e.target.value); e.target.value = '' }">
-            <option value="">+ Добавить фракцию</option>
+            <option value="">{{ $t('common.add_faction') }}</option>
             <option v-for="f in allFactions.filter(f => !(edited.Ownership ?? []).includes(f.Name))" :key="f.Name" :value="f.Name">
               {{ f.DisplayName || f.Name }}
             </option>
@@ -638,9 +639,9 @@ async function removeFromBuilding(loc) {
 
         <!-- Эры -->
         <section class="stat-section">
-          <h3>Доступность по эрам</h3>
+          <h3>{{ $t('unit.section_eras') }}</h3>
           <div v-for="eraNum in [0, 1, 2]" :key="eraNum" class="era-block">
-            <div class="era-label">Эра {{ eraNum }}</div>
+            <div class="era-label">{{ $t('unit.era', { n: eraNum }) }}</div>
             <div class="ownership-chips">
               <span v-for="f in eraFactions(eraNum)" :key="f" class="chip chip--era">
                 {{ f }}
@@ -648,7 +649,7 @@ async function removeFromBuilding(loc) {
               </span>
             </div>
             <select v-if="allFactions.length" class="faction-add-select" @change="e => { addEraFaction(eraNum, e.target.value); e.target.value = '' }">
-              <option value="">+ Добавить в эру {{ eraNum }}</option>
+              <option value="">{{ $t('unit.add_to_era', { n: eraNum }) }}</option>
               <option v-for="f in availableEraFactions(eraNum)" :key="f.Name" :value="f.Name">
                 {{ f.DisplayName || f.Name }}
               </option>
@@ -663,26 +664,26 @@ async function removeFromBuilding(loc) {
     <!-- Колонка зданий -->
     <div class="buildings-col">
       <div class="buildings-col-header">
-        <span>Здания найма</span>
-        <button class="btn-add-bld" @click="openBldPicker" title="Добавить в здание">+</button>
+        <span>{{ $t('unit.building_hire_col') }}</span>
+        <button class="btn-add-bld" @click="openBldPicker" :title="$t('unit.add_building')">+</button>
       </div>
       <ul class="bld-list">
         <li v-for="loc in unitBuildings" :key="loc.GroupName + '/' + loc.LevelName" class="bld-item">
           <div class="bld-item-name">{{ loc.LevelDisplayName || loc.LevelName }}</div>
           <div class="bld-item-group">{{ loc.GroupDisplayName || loc.GroupName }}</div>
-          <button class="bld-item-remove" @click="removeFromBuilding(loc)" title="Убрать">✕</button>
+          <button class="bld-item-remove" @click="removeFromBuilding(loc)" :title="$t('unit.remove_from_building')">✕</button>
         </li>
-        <li v-if="unitBuildings.length === 0" class="bld-empty">Не добавлен ни в одно здание</li>
+        <li v-if="unitBuildings.length === 0" class="bld-empty">{{ $t('unit.not_in_any_building') }}</li>
       </ul>
 
       <!-- Пикер зданий -->
       <div v-if="bldPicker" class="bld-picker-overlay" @click.self="bldPicker = false">
         <div class="bld-picker">
           <div class="bld-picker-header">
-            <input v-model="bldPickerSearch" class="bld-picker-search" placeholder="Поиск..." autofocus />
+            <input v-model="bldPickerSearch" class="bld-picker-search" :placeholder="$t('common.search_placeholder')" autofocus />
             <button class="bld-picker-close" @click="bldPicker = false">✕</button>
           </div>
-          <div v-if="bldPickerLoading" class="bld-picker-loading">Загрузка...</div>
+          <div v-if="bldPickerLoading" class="bld-picker-loading">{{ $t('common.loading') }}</div>
           <div v-else class="bld-picker-list">
             <div v-for="grp in filteredBldGroups()" :key="grp.Name" class="bld-picker-grp">
               <div class="bld-picker-grp-name">{{ grp.DisplayName || grp.Name }}</div>
@@ -693,7 +694,7 @@ async function removeFromBuilding(loc) {
                 @click="addToBuilding(grp, lvl)"
               >{{ lvl.DisplayName || lvl.Name }}</button>
             </div>
-            <div v-if="filteredBldGroups().length === 0" class="bld-picker-empty">Нет подходящих зданий</div>
+            <div v-if="filteredBldGroups().length === 0" class="bld-picker-empty">{{ $t('unit.no_suitable_buildings') }}</div>
           </div>
         </div>
       </div>
@@ -701,7 +702,7 @@ async function removeFromBuilding(loc) {
 
   </div>
   <div v-else class="detail-empty">
-    <span>Выберите юнит</span>
+    <span>{{ $t('unit.select_unit_m2tw') }}</span>
   </div>
 </template>
 

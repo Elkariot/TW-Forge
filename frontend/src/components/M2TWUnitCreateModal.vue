@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { CreateM2TWUnit, GetM2TWAllUnits } from '../../wailsjs/go/main/App'
 import M2TWUnitDetail from './M2TWUnitDetail.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps(['faction'])
 const emit = defineEmits(['close', 'created'])
@@ -50,14 +53,14 @@ onMounted(async () => {
 })
 
 async function create() {
-  const t = newType.value.trim()
-  if (!t) { error.value = 'Введите тип юнита'; return }
-  if (!templateType.value) { error.value = 'Выберите шаблон'; return }
+  const unitType = newType.value.trim()
+  if (!unitType) { error.value = t('unit_modal.error_enter_type'); return }
+  if (!templateType.value) { error.value = t('unit_modal.error_select_template'); return }
   loading.value = true
   error.value = null
   try {
-    await CreateM2TWUnit(templateType.value, t, props.faction ?? '')
-    createdType.value = t
+    await CreateM2TWUnit(templateType.value, unitType, props.faction ?? '')
+    createdType.value = unitType
     phase.value = 'edit'
   } catch (e) {
     error.value = String(e)
@@ -77,28 +80,28 @@ function onDeleted() { emit('close') }
 
       <div class="modal-header">
         <span class="modal-title">
-          {{ phase === 'setup' ? 'Новый юнит (M2TW)' : `Редактирование: ${createdType}` }}
+          {{ phase === 'setup' ? $t('unit_modal.title_new_m2tw') : $t('unit_modal.title_edit', { type: createdType }) }}
         </span>
         <div class="modal-header-actions">
-          <button v-if="phase === 'edit'" class="btn-done" @click="done">Готово</button>
+          <button v-if="phase === 'edit'" class="btn-done" @click="done">{{ $t('common.done') }}</button>
           <button class="modal-close" @click="phase === 'edit' ? done() : emit('close')">✕</button>
         </div>
       </div>
 
       <div v-if="phase === 'setup'" class="modal-body">
         <label class="field">
-          <span class="field-label">Тип нового юнита</span>
-          <input v-model="newType" class="field-input" placeholder="например: English Knight" autofocus @keydown.enter="create" />
+          <span class="field-label">{{ $t('unit_modal.new_unit_type') }}</span>
+          <input v-model="newType" class="field-input" :placeholder="$t('unit_modal.placeholder_m2tw')" autofocus @keydown.enter="create" />
         </label>
         <div v-if="newType.trim()" class="dict-preview">
           dictionary → <code>{{ derivedDict }}</code>
         </div>
         <label class="field">
-          <span class="field-label">Скопировать характеристики с</span>
+          <span class="field-label">{{ $t('unit_modal.copy_from') }}</span>
           <input
             v-model="templateSearch"
             class="field-input search-input"
-            placeholder="Поиск по имени или типу..."
+            :placeholder="$t('common.search_placeholder')"
           />
           <select v-model="templateType" class="field-input template-select" size="6">
             <option v-for="u in filteredUnits" :key="u.Type" :value="u.Type">
@@ -110,9 +113,9 @@ function onDeleted() { emit('close') }
         <div v-if="error" class="modal-error">{{ error }}</div>
         <div class="modal-actions">
           <button class="btn-create" :disabled="loading || allUnits.length === 0" @click="create">
-            {{ loading ? 'Создание...' : 'Создать' }}
+            {{ loading ? $t('unit_modal.creating') : $t('unit_modal.create') }}
           </button>
-          <button class="btn-cancel" @click="emit('close')">Отмена</button>
+          <button class="btn-cancel" @click="emit('close')">{{ $t('common.cancel') }}</button>
         </div>
       </div>
 

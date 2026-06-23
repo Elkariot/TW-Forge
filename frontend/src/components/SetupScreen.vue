@@ -6,6 +6,14 @@ import {
   LoadAppConfig, SaveAppConfig,
 } from '../../wailsjs/go/main/App'
 import ThemePicker from './ThemePicker.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t, locale } = useI18n()
+
+function toggleLang() {
+  locale.value = locale.value === 'ru' ? 'en' : 'ru'
+  localStorage.setItem('tw-forge-lang', locale.value)
+}
 
 import romeImg from '../assets/images/Rome.jpg'
 import medievalImg from '../assets/images/Medieval.png'
@@ -123,7 +131,7 @@ async function validatePath() {
     const modsMap = await GetMods()
     const baseDataPath = await GetBaseGameDataPath()
 
-    const list = [{ name: 'Base game', dataPath: baseDataPath }]
+    const list = [{ name: t('setup.base_game'), dataPath: baseDataPath }]
     for (const [name, dataPath] of Object.entries(modsMap)) {
       list.push({ name: prettify(name), dataPath })
     }
@@ -146,7 +154,7 @@ async function browseAddMod() {
     const baseDataPath = await GetBaseGameDataPath()
     const modsMap = await GetMods()
     const list = []
-    if (baseDataPath) list.push({ name: 'Base game', dataPath: baseDataPath })
+    if (baseDataPath) list.push({ name: t('setup.base_game'), dataPath: baseDataPath })
     for (const [n, dataPath] of Object.entries(modsMap)) {
       list.push({ name: prettify(n), dataPath })
     }
@@ -180,7 +188,10 @@ function prettify(name) {
 
     <div class="setup-header">
       <div class="setup-title">⚔ TW Forge</div>
-      <ThemePicker />
+      <div class="setup-header-actions">
+        <ThemePicker />
+        <button class="lang-switch" @click="toggleLang">{{ locale === 'ru' ? 'EN' : 'RU' }}</button>
+      </div>
     </div>
 
     <div class="setup-body">
@@ -188,7 +199,7 @@ function prettify(name) {
       <!-- Левая колонка: выбор игры + путь -->
       <div class="col-left">
 
-        <div class="section-label">Выберите игру</div>
+        <div class="section-label">{{ $t('setup.select_game') }}</div>
         <div class="game-cards">
           <button
             v-for="game in GAMES"
@@ -203,7 +214,7 @@ function prettify(name) {
         </div>
 
         <template v-if="selectedGame !== null">
-          <div class="section-label" style="margin-top: 28px">Путь к папке игры</div>
+          <div class="section-label" style="margin-top: 28px">{{ $t('setup.game_folder_path') }}</div>
           <div class="path-row">
             <input
               v-model="gamePath"
@@ -212,7 +223,7 @@ function prettify(name) {
               @change="validatePath"
             />
             <button class="btn-browse" :disabled="pathLoading" @click="browse">
-              {{ pathLoading ? '...' : 'Обзор' }}
+              {{ pathLoading ? '...' : $t('setup.browse') }}
             </button>
           </div>
           <div v-if="pathError" class="path-error">{{ pathError }}</div>
@@ -224,7 +235,7 @@ function prettify(name) {
       <div class="col-right">
 
         <template v-if="modsReady">
-          <div class="section-label">Выберите мод</div>
+          <div class="section-label">{{ $t('setup.select_mod') }}</div>
           <div class="mods-list">
             <button
               v-for="mod in mods"
@@ -242,10 +253,10 @@ function prettify(name) {
         </template>
 
         <div v-else-if="selectedGame !== null && !pathLoading && !pathError" class="mods-hint">
-          Моды появятся после выбора папки игры<br/>или добавьте мод вручную
+          {{ $t('setup.mods_hint') }}
         </div>
 
-        <button class="btn-add-mod" :disabled="selectedGame === null || !gamePath" @click="browseAddMod">+ Добавить мод</button>
+        <button class="btn-add-mod" :disabled="selectedGame === null || !gamePath" @click="browseAddMod">{{ $t('setup.add_mod') }}</button>
 
       </div>
 
@@ -255,8 +266,8 @@ function prettify(name) {
     <div class="setup-footer">
       <span v-if="launchError" class="launch-error">{{ launchError }}</span>
       <button class="btn-launch" :disabled="!canLaunch" @click="launch">
-        <span v-if="launching">Загрузка...</span>
-        <span v-else>Начать редактирование →</span>
+        <span v-if="launching">{{ $t('setup.launching') }}</span>
+        <span v-else>{{ $t('setup.start_editing') }}</span>
       </button>
     </div>
 
@@ -281,6 +292,24 @@ function prettify(name) {
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
+.setup-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lang-switch {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  transition: background 0.15s;
+}
+.lang-switch:hover { background: var(--color-cell); color: var(--color-text); }
 .setup-title {
   font-size: 20px;
   font-weight: 700;

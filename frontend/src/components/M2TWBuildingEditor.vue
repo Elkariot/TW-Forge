@@ -5,6 +5,9 @@ import {
   UpdateM2TWBuildingLevel, UpdateM2TWBuildingLevelProps,
   RevertM2TWBuildings,
 } from '../../wailsjs/go/main/App'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const emit = defineEmits(['changed'])
 
@@ -24,30 +27,30 @@ const bonusItems = ref([])
 const newBonus = ref('')
 const showTemplates = ref(false)
 
-const SETTLEMENT_OPTIONS = [
-  { value: '', label: '— нет ограничения —' },
-  { value: 'village', label: 'Деревня (village)' },
-  { value: 'town', label: 'Город (town)' },
-  { value: 'large_town', label: 'Большой город (large_town)' },
-  { value: 'city', label: 'Мегаполис (city)' },
-  { value: 'large_city', label: 'Большой мегаполис (large_city)' },
-  { value: 'huge_city', label: 'Огромный мегаполис (huge_city)' },
-]
+const SETTLEMENT_OPTIONS = computed(() => [
+  { value: '', label: t('building.settlement_none') },
+  { value: 'village', label: t('building.settlement_village') },
+  { value: 'town', label: t('building.settlement_town') },
+  { value: 'large_town', label: t('building.settlement_large_town') },
+  { value: 'city', label: t('building.settlement_city') },
+  { value: 'large_city', label: t('building.settlement_large_city') },
+  { value: 'huge_city', label: t('building.settlement_huge_city') },
+])
 
-const SETTLEMENT_TYPE_OPTIONS = [
-  { value: '', label: '— оба типа —' },
+const SETTLEMENT_TYPE_OPTIONS = computed(() => [
+  { value: '', label: t('building.field_settlement_type_both') },
   { value: 'city', label: 'City' },
   { value: 'castle', label: 'Castle' },
-]
+])
 
-const M2TW_BONUS_TEMPLATES = [
-  { cat: 'Население',  items: ['happiness_bonus bonus ', 'law_bonus bonus ', 'population_health_bonus bonus ', 'population_growth_bonus bonus '] },
-  { cat: 'Экономика',  items: ['trade_base_income_bonus bonus ', 'farming_level bonus ', 'farming_level ', 'trade_fleet ', 'mine_resource '] },
-  { cat: 'Войска',     items: ['recruits_exp_bonus bonus ', 'recruits_morale_bonus bonus ', 'recruitment_slots ', 'armour bonus ', 'weapon_simple bonus ', 'weapon_bladed bonus ', 'weapon_missile bonus ', 'upgrade_bodyguard ', 'siege_engineer', 'shipwright'] },
-  { cat: 'Укрепления', items: ['wall_level ', 'gate_strength ', 'gate_defences ', 'tower_level '] },
-  { cat: 'Дороги',     items: ['road_level ', 'paved_roads', 'highways'] },
-  { cat: 'Агенты',     items: ['agent spy 0 requires factions { }', 'agent diplomat 0 requires factions { }', 'agent assassin 0 requires factions { }'] },
-]
+const M2TW_BONUS_TEMPLATES = computed(() => [
+  { cat: 'Population',    items: ['happiness_bonus bonus ', 'law_bonus bonus ', 'population_health_bonus bonus ', 'population_growth_bonus bonus '] },
+  { cat: 'Economy',       items: ['trade_base_income_bonus bonus ', 'farming_level bonus ', 'farming_level ', 'trade_fleet ', 'mine_resource '] },
+  { cat: 'Military',      items: ['recruits_exp_bonus bonus ', 'recruits_morale_bonus bonus ', 'recruitment_slots ', 'armour bonus ', 'weapon_simple bonus ', 'weapon_bladed bonus ', 'weapon_missile bonus ', 'upgrade_bodyguard ', 'siege_engineer', 'shipwright'] },
+  { cat: 'Fortifications',items: ['wall_level ', 'gate_strength ', 'gate_defences ', 'tower_level '] },
+  { cat: 'Roads',         items: ['road_level ', 'paved_roads', 'highways'] },
+  { cat: 'Agents',        items: ['agent spy 0 requires factions { }', 'agent diplomat 0 requires factions { }', 'agent assassin 0 requires factions { }'] },
+])
 
 onMounted(async () => {
   ;[buildings.value, factions.value] = await Promise.all([GetM2TWBuildings(), GetM2TWFactions()])
@@ -98,7 +101,7 @@ const allLevelNames = computed(() => {
 })
 
 function selectLevel(grp, lvl) {
-  if (localDirty.value && !confirm('Есть несохранённые изменения. Продолжить?')) return
+  if (localDirty.value && !confirm(t('building.unsaved_confirm'))) return
   selectedGroup.value = grp
   selectedLevel.value = lvl
   edited.value = JSON.parse(JSON.stringify(lvl))
@@ -231,7 +234,7 @@ async function save() {
 }
 
 async function revertAll() {
-  if (!confirm('Откатить все изменения зданий?')) return
+  if (!confirm(t('building.revert_all_confirm'))) return
   try {
     await RevertM2TWBuildings()
     ;[buildings.value, factions.value] = await Promise.all([GetM2TWBuildings(), GetM2TWFactions()])
@@ -254,17 +257,17 @@ async function revertAll() {
     <!-- Левая панель: список зданий -->
     <div class="bld-sidebar">
       <div class="bld-sidebar-top">
-        <input v-model="search" class="bld-search" placeholder="Поиск..." />
+        <input v-model="search" class="bld-search" :placeholder="$t('building.search_placeholder')" />
         <div class="bld-filters">
           <!-- Фракция -->
           <select class="bld-filter-select" @change="e => { selectedFaction = factions.find(f => f.Name === e.target.value) || null }">
-            <option value="">Все фракции</option>
+            <option value="">{{ $t('building.all_factions') }}</option>
             <option v-for="f in factions" :key="f.Name" :value="f.Name">{{ f.DisplayName || f.Name }}</option>
           </select>
           <!-- City / Castle -->
           <div class="settlement-tabs">
             <button
-              v-for="opt in [{ value: 'all', label: 'Все' }, { value: 'city', label: 'City' }, { value: 'castle', label: 'Castle' }]"
+              v-for="opt in [{ value: 'all', label: $t('building.filter_all') }, { value: 'city', label: 'City' }, { value: 'castle', label: 'Castle' }]"
               :key="opt.value"
               class="settlement-tab"
               :class="{ active: settlementFilter === opt.value }"
@@ -292,7 +295,7 @@ async function revertAll() {
             <span v-if="lvl.SettlementType" class="bld-lvl-type">{{ lvl.SettlementType }}</span>
           </button>
         </div>
-        <div v-if="filteredGroups.length === 0" class="bld-empty">Нет результатов</div>
+        <div v-if="filteredGroups.length === 0" class="bld-empty">{{ $t('building.no_entries') }}</div>
       </div>
     </div>
 
@@ -306,9 +309,9 @@ async function revertAll() {
         </div>
         <div class="bld-detail-actions">
           <span v-if="error" class="bld-error">{{ error }}</span>
-          <button v-if="localDirty" class="btn-save" :disabled="saving" @click="save">{{ saving ? '...' : 'Сохранить' }}</button>
-          <button v-if="localDirty" class="btn-cancel" @click="edited = JSON.parse(JSON.stringify(selectedLevel)); bonusItems = bonusesFromLevel(selectedLevel); localDirty = false">Отмена</button>
-          <button class="btn-revert-all" @click="revertAll" title="Откатить все здания">↺</button>
+          <button v-if="localDirty" class="btn-save" :disabled="saving" @click="save">{{ saving ? '...' : $t('building.save') }}</button>
+          <button v-if="localDirty" class="btn-cancel" @click="edited = JSON.parse(JSON.stringify(selectedLevel)); bonusItems = bonusesFromLevel(selectedLevel); localDirty = false">{{ $t('common.cancel') }}</button>
+          <button class="btn-revert-all" @click="revertAll" :title="$t('building.revert_changes')">↺</button>
         </div>
       </div>
 
@@ -316,35 +319,35 @@ async function revertAll() {
 
         <!-- Свойства уровня -->
         <section class="bld-section">
-          <h3>Свойства</h3>
+          <h3>{{ $t('building.section_properties') }}</h3>
           <div class="prop-grid">
-            <label>Тип поселения
+            <label>{{ $t('building.field_settlement_type') }}
               <select v-model="edited.SettlementType" @change="markDirty">
                 <option v-for="o in SETTLEMENT_TYPE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select>
             </label>
-            <label>Мин. поселение
+            <label>{{ $t('building.field_settlement_min') }}
               <select v-model="edited.SettlementMin" @change="markDirty">
                 <option v-for="o in SETTLEMENT_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select>
             </label>
-            <label>Строительство<input type="number" v-model.number="edited.Construction" @input="markDirty" /></label>
-            <label>Стоимость<input type="number" v-model.number="edited.Cost" @input="markDirty" /></label>
-            <label>Convert to<input type="number" v-model.number="edited.ConvertTo" @input="markDirty" /></label>
+            <label>{{ $t('building.field_construction') }}<input type="number" v-model.number="edited.Construction" @input="markDirty" /></label>
+            <label>{{ $t('building.field_cost') }}<input type="number" v-model.number="edited.Cost" @input="markDirty" /></label>
+            <label>{{ $t('building.field_convert_to') }}<input type="number" v-model.number="edited.ConvertTo" @input="markDirty" /></label>
           </div>
 
           <!-- Зависимость -->
           <div class="dep-row">
-            <span class="dep-label">Требует здание:</span>
-            <input class="dep-input" placeholder="группа" :value="edited.Dependency?.Group ?? ''"
+            <span class="dep-label">{{ $t('building.requires_building') }}</span>
+            <input class="dep-input" :placeholder="$t('building.level_group_placeholder')" :value="edited.Dependency?.Group ?? ''"
               @input="e => { edited.Dependency = { ...(edited.Dependency ?? {}), Group: e.target.value }; markDirty() }" />
-            <input class="dep-input dep-input--lvl" placeholder="уровень" :value="edited.Dependency?.Level ?? ''"
+            <input class="dep-input dep-input--lvl" :placeholder="$t('building.level_lvl_placeholder')" :value="edited.Dependency?.Level ?? ''"
               @input="e => { edited.Dependency = { ...(edited.Dependency ?? {}), Level: e.target.value }; markDirty() }" />
           </div>
 
           <!-- Требуемые фракции -->
           <div class="faction-req-block">
-            <div class="faction-req-label">Требуется фракция:</div>
+            <div class="faction-req-label">{{ $t('building.requires_faction') }}</div>
             <div class="ownership-chips">
               <span v-for="f in edited.RequiredCultures" :key="f" class="chip">
                 {{ f }}
@@ -352,7 +355,7 @@ async function revertAll() {
               </span>
             </div>
             <select class="faction-add-select" @change="e => { addRequiredFaction(e.target.value); e.target.value = '' }">
-              <option value="">+ Добавить фракцию</option>
+              <option value="">{{ $t('common.add_faction') }}</option>
               <option v-for="f in factions.filter(f => !(edited.RequiredCultures ?? []).includes(f.Name))" :key="f.Name" :value="f.Name">
                 {{ f.DisplayName || f.Name }}
               </option>
@@ -363,8 +366,8 @@ async function revertAll() {
         <!-- Найм (recruit_pool) -->
         <section class="bld-section">
           <div class="section-header-row">
-            <h3>Найм (recruit_pool)</h3>
-            <button class="btn-small-add" @click="addPool">+ Добавить</button>
+            <h3>{{ $t('building.section_recruit') }}</h3>
+            <button class="btn-small-add" @click="addPool">{{ $t('building.add_pool') }}</button>
           </div>
 
           <div v-for="(pool, idx) in edited.RecruitPools" :key="idx" class="pool-card">
@@ -373,15 +376,15 @@ async function revertAll() {
               <button class="pool-remove" @click="removePool(idx)">✕</button>
             </div>
             <div class="pool-grid">
-              <label class="pool-full">Юнит<input :value="pool.UnitType" @input="e => { pool.UnitType = e.target.value; markDirty() }" /></label>
-              <label>Нач. пул<input type="number" :value="pool.InitialPool" @input="e => { pool.InitialPool = +e.target.value; markDirty() }" /></label>
-              <label>Пополнение<input type="number" step="0.01" :value="pool.ReplenishRate" @input="e => { pool.ReplenishRate = +e.target.value; markDirty() }" /></label>
-              <label>Макс. пул<input type="number" :value="pool.MaxPool" @input="e => { pool.MaxPool = +e.target.value; markDirty() }" /></label>
-              <label>Опыт<input type="number" :value="pool.ExpGained" @input="e => { pool.ExpGained = +e.target.value; markDirty() }" /></label>
+              <label class="pool-full">{{ $t('building.pool_unit') }}<input :value="pool.UnitType" @input="e => { pool.UnitType = e.target.value; markDirty() }" /></label>
+              <label>{{ $t('building.pool_initial') }}<input type="number" :value="pool.InitialPool" @input="e => { pool.InitialPool = +e.target.value; markDirty() }" /></label>
+              <label>{{ $t('building.pool_replenish') }}<input type="number" step="0.01" :value="pool.ReplenishRate" @input="e => { pool.ReplenishRate = +e.target.value; markDirty() }" /></label>
+              <label>{{ $t('building.pool_max') }}<input type="number" :value="pool.MaxPool" @input="e => { pool.MaxPool = +e.target.value; markDirty() }" /></label>
+              <label>{{ $t('building.pool_exp') }}<input type="number" :value="pool.ExpGained" @input="e => { pool.ExpGained = +e.target.value; markDirty() }" /></label>
             </div>
             <!-- Фракции пула -->
             <div class="pool-factions">
-              <div class="pool-factions-label">Фракции <span class="pool-hint">(пусто = все)</span></div>
+              <div class="pool-factions-label">{{ $t('building.pool_factions') }} <span class="pool-hint">{{ $t('building.pool_factions_hint') }}</span></div>
               <div class="ownership-chips">
                 <span v-for="f in pool.Factions" :key="f" class="chip chip--small">
                   {{ f }}
@@ -389,31 +392,31 @@ async function revertAll() {
                 </span>
               </div>
               <select class="faction-add-select" @change="e => { addPoolFaction(idx, e.target.value); e.target.value = '' }">
-                <option value="">+ Фракция</option>
+                <option value="">{{ $t('common.add_faction') }}</option>
                 <option v-for="f in factions.filter(f => !(pool.Factions ?? []).includes(f.Name))" :key="f.Name" :value="f.Name">
                   {{ f.DisplayName || f.Name }}
                 </option>
               </select>
             </div>
             <!-- Условия -->
-            <label class="pool-cond-label">Условия (raw)<input class="pool-cond" :value="pool.Conditions" @input="e => { pool.Conditions = e.target.value; markDirty() }" /></label>
+            <label class="pool-cond-label">{{ $t('building.pool_conditions') }}<input class="pool-cond" :value="pool.Conditions" @input="e => { pool.Conditions = e.target.value; markDirty() }" /></label>
           </div>
-          <div v-if="!edited.RecruitPools?.length" class="bld-empty">Нет записей найма</div>
+          <div v-if="!edited.RecruitPools?.length" class="bld-empty">{{ $t('building.no_recruit_entries') }}</div>
         </section>
 
         <!-- Бонусы (capability) -->
         <section class="bld-section">
-          <h3>Бонусы (capability)</h3>
+          <h3>{{ $t('building.section_bonuses') }}</h3>
 
           <div class="be-bonus-list">
-            <div v-if="bonusItems.length === 0" class="bld-empty">Нет бонусов</div>
+            <div v-if="bonusItems.length === 0" class="bld-empty">{{ $t('building.no_bonuses_entry') }}</div>
             <div v-for="(item, i) in bonusItems" :key="i" class="be-bonus-row">
               <div class="be-bonus-tag" :class="{ 'is-new': isNewBonus(item), 'is-modified': isModifiedBonus(item) }">
-                {{ isNewBonus(item) ? 'new' : isModifiedBonus(item) ? 'изм' : '' }}
+                {{ isNewBonus(item) ? 'new' : isModifiedBonus(item) ? 'mod' : '' }}
               </div>
               <input :value="item.text" class="be-bonus-input" @input="e => { item.text = e.target.value; markDirty() }" />
-              <button v-if="isModifiedBonus(item)" class="be-bonus-action revert" @click="revertBonus(item)" title="Откатить к оригиналу">↺</button>
-              <button class="be-bonus-action remove" @click="removeBonus(i)" title="Удалить">✕</button>
+              <button v-if="isModifiedBonus(item)" class="be-bonus-action revert" @click="revertBonus(item)" :title="$t('common.revert')">↺</button>
+              <button class="be-bonus-action remove" @click="removeBonus(i)">✕</button>
             </div>
           </div>
 
@@ -421,7 +424,7 @@ async function revertAll() {
             <div class="be-upg-input-row">
               <input v-model="newBonus" class="be-bonus-new-input" placeholder="happiness_bonus bonus 3" @keydown.enter="addBonus" />
               <button class="be-upg-add-btn" @click="addBonus">+</button>
-              <button class="be-tpl-toggle" :class="{ active: showTemplates }" @click="showTemplates = !showTemplates" title="Шаблоны">≡</button>
+              <button class="be-tpl-toggle" :class="{ active: showTemplates }" @click="showTemplates = !showTemplates" :title="$t('building.bonus_template_title')">≡</button>
             </div>
             <div v-if="showTemplates" class="be-templates">
               <div v-for="cat in M2TW_BONUS_TEMPLATES" :key="cat.cat" class="be-tpl-cat">
@@ -436,7 +439,7 @@ async function revertAll() {
 
         <!-- Улучшения (upgrades) -->
         <section class="bld-section">
-          <h3>Улучшения (upgrades)</h3>
+          <h3>{{ $t('building.section_upgrades_header') }}</h3>
           <div class="ownership-chips">
             <span v-for="u in edited.Upgrades" :key="u" class="chip">
               {{ u }}
@@ -444,7 +447,7 @@ async function revertAll() {
             </span>
           </div>
           <select class="faction-add-select" @change="e => { addUpgrade(e.target.value); e.target.value = '' }">
-            <option value="">+ Добавить уровень</option>
+            <option value="">{{ $t('building.add_level') }}</option>
             <option v-for="n in allLevelNames.filter(n => !(edited.Upgrades ?? []).includes(n))" :key="n" :value="n">{{ n }}</option>
           </select>
         </section>
