@@ -11,7 +11,7 @@ type M2TWBuildingLevel struct {
 	Name             string
 	DisplayName      string
 	SettlementType   string // "city" or "castle"
-	RequiredCultures []string
+	RequiredFactions []string
 	Dependency       *BuildingDependency
 	DependencyInline bool // true when dependency appears on the level header line, not inside the block
 	ConvertTo        int
@@ -52,7 +52,7 @@ func BuildM2TWRecruitIndex(buildings []M2TWBuildingGroup) map[string][]RecruitLo
 func copyM2TWBuilding(b M2TWBuildingGroup) M2TWBuildingGroup {
 	levels := make([]M2TWBuildingLevel, len(b.Levels))
 	for i, l := range b.Levels {
-		l.RequiredCultures = copyStrings(l.RequiredCultures)
+		l.RequiredFactions = copyStrings(l.RequiredFactions)
 		l.Upgrades = copyStrings(l.Upgrades)
 		l.BonusLines = copyStrings(l.BonusLines)
 		pools := make([]M2TWRecruitPool, len(l.RecruitPools))

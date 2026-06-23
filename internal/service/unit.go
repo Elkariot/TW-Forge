@@ -171,11 +171,11 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 
 func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
 	if _, exists := s.repo.GetUnitByType(newType); exists {
-		return fmt.Errorf("юнит с типом %q уже существует", newType)
+		return fmt.Errorf("unit with type %q already exists", newType)
 	}
 	unit, ok := s.repo.GetUnitByType(templateType)
 	if !ok {
-		return fmt.Errorf("шаблон %q не найден", templateType)
+		return fmt.Errorf("template %q not found", templateType)
 	}
 
 	srcFaction := ""
@@ -188,7 +188,7 @@ func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
 	unit.Dictionary = strings.ReplaceAll(newType, " ", "_")
 	unit.Ownership = []string{faction}
 	if err := s.repo.AddUnit(unit); err != nil {
-		return fmt.Errorf("ошибка создания юнита: %w", err)
+		return fmt.Errorf("failed to create unit: %w", err)
 	}
 
 	_ = s.repo.CopyUnitModelAssets(soldierModel, templateType, newType, srcFaction, faction)
@@ -225,36 +225,34 @@ func (s *UnitService) GetUnitChangeType(unitType string) string {
 	}
 }
 
-// Validate проверяет что юнит готов к сохранению.
-// originalType — тип до редактирования (исключается из проверки уникальности).
 func (s *UnitService) Validate(unit domain.Unit, originalType string) []string {
 	var errs []string
 
 	trimmedType := strings.TrimSpace(unit.Type)
 	if trimmedType == "" {
-		errs = append(errs, "не задан внутренний тип юнита (type)")
+		errs = append(errs, "unit type (internal id) is required")
 	} else if trimmedType != originalType {
 		if _, exists := s.repo.GetUnitByType(trimmedType); exists {
-			errs = append(errs, fmt.Sprintf("тип \"%s\" уже занят другим юнитом", trimmedType))
+			errs = append(errs, fmt.Sprintf("type %q is already used by another unit", trimmedType))
 		}
 	}
 
 	if strings.TrimSpace(unit.Name) == "" {
-		errs = append(errs, "не задано отображаемое имя юнита")
+		errs = append(errs, "unit display name is required")
 	}
 
 	if len(unit.Ownership) == 0 {
-		errs = append(errs, "юнит не принадлежит ни одной фракции")
+		errs = append(errs, "unit must belong to at least one faction")
 	} else {
 		for _, faction := range unit.Ownership {
 			if _, ok := s.repo.GetFactionByName(faction); !ok {
-				errs = append(errs, fmt.Sprintf("фракция \"%s\" не найдена", faction))
+				errs = append(errs, fmt.Sprintf("faction %q not found", faction))
 			}
 		}
 	}
 
 	if len(s.repo.GetUnitBuildings(unit.Type)) == 0 {
-		errs = append(errs, "юнит не привязан ни к одному зданию для найма")
+		errs = append(errs, "unit is not assigned to any recruitment building")
 	}
 
 	return errs

@@ -447,7 +447,7 @@ func (p *Parser) parseM2TWBuildings() ([]domain.M2TWBuildingGroup, []string, err
 				curLevel = domain.M2TWBuildingLevel{
 					Name:             pendingLevelName,
 					SettlementType:   pendingLevelType,
-					RequiredCultures: pendingLevelFactions,
+					RequiredFactions: pendingLevelFactions,
 					Dependency:       pendingDependency,
 					DependencyInline: pendingDependency != nil,
 					ConvertTo:        pendingConvertTo,

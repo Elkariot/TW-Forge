@@ -27,16 +27,6 @@ func (r *InMemoryRepository) GetDeletedUnits() []domain.Unit {
 	return units
 }
 
-func (r *InMemoryRepository) GetAllUnitsTypes() []string {
-	units := r.GetAllUnits()
-	unitsTypes := make([]string, len(units))
-
-	for _, unit := range units {
-		unitsTypes = append(unitsTypes, unit.Type)
-	}
-
-	return unitsTypes
-}
 
 func (r *InMemoryRepository) GetUnitsByFaction(faction string) ([]domain.Unit, error) {
 	if _, ok := r.GetFactionByName(faction); !ok {
@@ -212,7 +202,6 @@ func (r *InMemoryRepository) RevertUnit(unitType string) error {
 
 	switch changeType {
 	case ChangeAdded:
-		// просто удаляем из working, в original его не было
 		for i, u := range r.working.Units {
 			if u.Type == unitType {
 				r.working.Units = slices.Delete(r.working.Units, i, i+1)
@@ -220,7 +209,6 @@ func (r *InMemoryRepository) RevertUnit(unitType string) error {
 			}
 		}
 	case ChangeModified:
-		// восстанавливаем из original
 		for _, u := range r.original.Units {
 			if u.Type == unitType {
 				for i, wu := range r.working.Units {
@@ -232,16 +220,50 @@ func (r *InMemoryRepository) RevertUnit(unitType string) error {
 				break
 			}
 		}
+		r.restoreUnitBuildingSlots(unitType)
 	case ChangeDeleted:
-		// возвращаем оригинал в конец списка
 		for _, u := range r.original.Units {
 			if u.Type == unitType {
 				r.working.Units = append(r.working.Units, u)
 				break
 			}
 		}
+		r.restoreUnitBuildingSlots(unitType)
 	}
 
 	delete(r.changes, unitType)
 	return nil
+}
+
+func (r *InMemoryRepository) restoreUnitBuildingSlots(unitType string) {
+	type key struct{ group, level string }
+	origSlots := make(map[key][]domain.RecruitSlot)
+	for _, g := range r.original.Buildings {
+		for _, l := range g.Levels {
+			for _, s := range l.RecruitSlots {
+				if s.UnitType == unitType {
+					k := key{g.Name, l.Name}
+					origSlots[k] = append(origSlots[k], s)
+				}
+			}
+		}
+	}
+	for gi := range r.working.Buildings {
+		for li := range r.working.Buildings[gi].Levels {
+			lvl := &r.working.Buildings[gi].Levels[li]
+			k := key{r.working.Buildings[gi].Name, lvl.Name}
+			var keep []domain.RecruitSlot
+			for _, s := range lvl.RecruitSlots {
+				if s.UnitType != unitType {
+					keep = append(keep, s)
+				}
+			}
+			if orig, ok := origSlots[k]; ok {
+				keep = append(keep, orig...)
+			}
+			lvl.RecruitSlots = keep
+		}
+	}
+	r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
+	r.buildingsDirty = true
 }

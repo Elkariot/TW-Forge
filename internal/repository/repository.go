@@ -26,7 +26,6 @@ type GameRepository interface {
 	// Units
 	GetAllUnits() []domain.Unit
 	GetDeletedUnits() []domain.Unit
-	GetAllUnitsTypes() []string
 	GetUnitsByFaction(faction string) ([]domain.Unit, error)
 	GetUnitByType(unitType string) (domain.Unit, bool)
 
@@ -115,6 +114,9 @@ func (r *InMemoryRepository) SaveDraft() error {
 func (r *InMemoryRepository) SaveBuildingsDraft() error {
 	if r.writer == nil {
 		return fmt.Errorf("writer not configured")
+	}
+	if !r.buildingsDirty {
+		return nil
 	}
 	return r.writer.SaveBuildingsDraft(r.working)
 }

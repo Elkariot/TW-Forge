@@ -29,11 +29,11 @@ func (r *InMemoryM2TWRepository) GetFactionBuildings(faction string) []domain.M2
 	var result []domain.M2TWBuildingGroup
 	for _, g := range r.working.Buildings {
 		for _, lvl := range g.Levels {
-			if len(lvl.RequiredCultures) == 0 {
+			if len(lvl.RequiredFactions) == 0 {
 				result = append(result, g)
-				break
+				goto nextGroup
 			}
-			for _, f := range lvl.RequiredCultures {
+			for _, f := range lvl.RequiredFactions {
 				if f == faction {
 					result = append(result, g)
 					goto nextGroup
@@ -80,7 +80,7 @@ func (r *InMemoryM2TWRepository) UpdateBuildingLevelProps(groupName, levelName s
 			lvl.ConvertTo = convertTo
 			lvl.SettlementMin = settlementMin
 			lvl.SettlementType = settlementType
-			lvl.RequiredCultures = requiredFactions
+			lvl.RequiredFactions = requiredFactions
 			if dependencyGroup != "" {
 				lvl.Dependency = &domain.BuildingDependency{Group: dependencyGroup, Level: dependencyLevel}
 			} else {

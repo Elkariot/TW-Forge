@@ -227,9 +227,9 @@ func formatM2TWLevelDefinition(name string, lvl domain.M2TWBuildingLevel) string
 		sb.WriteString(" ")
 		sb.WriteString(lvl.SettlementType)
 	}
-	if len(lvl.RequiredCultures) > 0 {
+	if len(lvl.RequiredFactions) > 0 {
 		sb.WriteString(" requires factions { ")
-		for _, c := range lvl.RequiredCultures {
+		for _, c := range lvl.RequiredFactions {
 			sb.WriteString(c)
 			sb.WriteString(", ")
 		}

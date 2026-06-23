@@ -241,6 +241,7 @@ func (r *InMemoryM2TWRepository) RevertUnit(unitType string) error {
 				break
 			}
 		}
+		r.restoreUnitBuildingPools(unitType)
 	case ChangeDeleted:
 		for _, u := range r.original.Units {
 			if u.Type == unitType {
@@ -248,8 +249,42 @@ func (r *InMemoryM2TWRepository) RevertUnit(unitType string) error {
 				break
 			}
 		}
+		r.restoreUnitBuildingPools(unitType)
 	}
 
 	delete(r.changes, unitType)
 	return nil
+}
+
+func (r *InMemoryM2TWRepository) restoreUnitBuildingPools(unitType string) {
+	type key struct{ group, level string }
+	origPools := make(map[key][]domain.M2TWRecruitPool)
+	for _, g := range r.original.Buildings {
+		for _, l := range g.Levels {
+			for _, p := range l.RecruitPools {
+				if p.UnitType == unitType {
+					k := key{g.Name, l.Name}
+					origPools[k] = append(origPools[k], p)
+				}
+			}
+		}
+	}
+	for gi := range r.working.Buildings {
+		for li := range r.working.Buildings[gi].Levels {
+			lvl := &r.working.Buildings[gi].Levels[li]
+			k := key{r.working.Buildings[gi].Name, lvl.Name}
+			var keep []domain.M2TWRecruitPool
+			for _, p := range lvl.RecruitPools {
+				if p.UnitType != unitType {
+					keep = append(keep, p)
+				}
+			}
+			if orig, ok := origPools[k]; ok {
+				keep = append(keep, orig...)
+			}
+			lvl.RecruitPools = keep
+		}
+	}
+	r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
+	r.buildingsDirty = true
 }
