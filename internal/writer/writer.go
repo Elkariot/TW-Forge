@@ -34,6 +34,16 @@ func New(gamePath string) *GameWriter {
 	}
 }
 
+// modelDBRelPath returns the relative path to battle_models.modeldb within gamePath.
+// M2TW keeps it under unit_models/; RTW has it at the root (rare).
+func (w *GameWriter) modelDBRelPath() string {
+	m2tw := filepath.Join("unit_models", "battle_models.modeldb")
+	if _, err := os.Stat(filepath.Join(w.gamePath, m2tw)); err == nil {
+		return m2tw
+	}
+	return "battle_models.modeldb"
+}
+
 func (w *GameWriter) SaveDraft(data domain.GameData, changes map[string]repository.ChangeType) error {
 	if err := w.ensureInit(); err != nil {
 		return err
@@ -72,9 +82,10 @@ func (w *GameWriter) Apply() error {
 			return err
 		}
 	}
-	draftModelDB := filepath.Join(w.draftPath, "battle_models.modeldb")
+	modelDBRel := w.modelDBRelPath()
+	draftModelDB := filepath.Join(w.draftPath, modelDBRel)
 	if _, err := os.Stat(draftModelDB); err == nil {
-		if err := w.applyFile("battle_models.modeldb"); err != nil {
+		if err := w.applyFile(modelDBRel); err != nil {
 			return err
 		}
 	}

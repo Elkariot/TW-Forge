@@ -11,13 +11,16 @@ import (
 // CopyUnitModelAssets добавляет texture/model_sprite записи в descr_model_battle.txt
 // и копирует обе иконки юнита: маленькую (#[TYPE].TGA) и портрет ([TYPE]_INFO.TGA).
 func (w *GameWriter) CopyUnitModelAssets(soldierModel, srcUnitType, dstUnitType, srcFaction, dstFaction string) error {
-	if soldierModel == "" || srcFaction == "" || dstFaction == "" || srcFaction == dstFaction {
+	if soldierModel == "" || srcFaction == "" || dstFaction == "" {
 		return nil
 	}
 	if err := w.ensureInit(); err != nil {
 		return err
 	}
-	_ = w.patchDescBattleModels(soldierModel, srcFaction, dstFaction)
+	// Model/texture entries in descr_model_battle.txt are per-faction; no patch needed when faction is unchanged.
+	if srcFaction != dstFaction {
+		_ = w.patchDescBattleModels(soldierModel, srcFaction, dstFaction)
+	}
 	_ = w.copyUnitIcon(srcUnitType, dstUnitType, srcFaction, dstFaction)
 	_ = w.copyUnitInfoCard(srcUnitType, dstUnitType, srcFaction, dstFaction)
 	return nil

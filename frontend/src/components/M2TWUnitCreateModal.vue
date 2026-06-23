@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { CreateM2TWUnit, GetM2TWAllUnits } from '../../wailsjs/go/main/App'
 import M2TWUnitDetail from './M2TWUnitDetail.vue'
 
@@ -9,6 +9,7 @@ const emit = defineEmits(['close', 'created'])
 const phase = ref('setup')
 const newType = ref('')
 const templateType = ref('')
+const templateSearch = ref('')
 const allUnits = ref([])
 const loading = ref(false)
 const error = ref(null)
@@ -16,10 +17,33 @@ const createdType = ref(null)
 
 const derivedDict = computed(() => newType.value.trim().replace(/ +/g, '_'))
 
+const sortedUnits = computed(() =>
+  [...allUnits.value].sort((a, b) => {
+    const na = (a.Name || a.Type).toLowerCase()
+    const nb = (b.Name || b.Type).toLowerCase()
+    return na < nb ? -1 : na > nb ? 1 : 0
+  })
+)
+
+const filteredUnits = computed(() => {
+  const q = templateSearch.value.trim().toLowerCase()
+  if (!q) return sortedUnits.value
+  return sortedUnits.value.filter(u =>
+    (u.Name || '').toLowerCase().includes(q) ||
+    u.Type.toLowerCase().includes(q)
+  )
+})
+
+watch(filteredUnits, units => {
+  if (units.length > 0 && !units.find(u => u.Type === templateType.value)) {
+    templateType.value = units[0].Type
+  }
+})
+
 onMounted(async () => {
   try {
     allUnits.value = await GetM2TWAllUnits()
-    if (allUnits.value.length > 0) templateType.value = allUnits.value[0].Type
+    if (allUnits.value.length > 0) templateType.value = sortedUnits.value[0].Type
   } catch (e) {
     error.value = String(e)
   }
@@ -48,7 +72,7 @@ function onDeleted() { emit('close') }
 </script>
 
 <template>
-  <div class="overlay" @click.self="emit('close')">
+  <div class="overlay">
     <div class="modal" :class="{ 'modal--wide': phase === 'edit' }">
 
       <div class="modal-header">
@@ -71,11 +95,17 @@ function onDeleted() { emit('close') }
         </div>
         <label class="field">
           <span class="field-label">Скопировать характеристики с</span>
-          <select v-model="templateType" class="field-input">
-            <option v-for="u in allUnits" :key="u.Type" :value="u.Type">
+          <input
+            v-model="templateSearch"
+            class="field-input search-input"
+            placeholder="Поиск по имени или типу..."
+          />
+          <select v-model="templateType" class="field-input template-select" size="6">
+            <option v-for="u in filteredUnits" :key="u.Type" :value="u.Type">
               {{ u.Name ? `${u.Name}  (${u.Type})` : u.Type }}
             </option>
           </select>
+          <span class="field-count">{{ filteredUnits.length }} / {{ allUnits.length }}</span>
         </label>
         <div v-if="error" class="modal-error">{{ error }}</div>
         <div class="modal-actions">
@@ -131,6 +161,9 @@ function onDeleted() { emit('close') }
 }
 .field-input:focus { outline: none; border-color: var(--color-accent); }
 .field-input option { background: var(--color-cell); }
+.search-input { margin-bottom: 4px; }
+.template-select { height: 140px; }
+.field-count { font-size: 10px; color: var(--color-text-muted); align-self: flex-end; margin-top: 2px; }
 .dict-preview { font-size: 11px; color: var(--color-text-muted); background: var(--color-input-bg); border-radius: 4px; padding: 5px 8px; margin-top: -8px; }
 .dict-preview code { color: #3aba80; font-size: 11px; }
 .modal-error { font-size: 12px; color: var(--color-error); }

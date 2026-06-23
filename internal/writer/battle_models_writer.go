@@ -64,7 +64,10 @@ func WriteBattleModels(db *domain.BattleModelsDB, path string) error {
 		}
 	}
 
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	// M2TW battle_models.modeldb requires CRLF line endings (Boost serialization format).
+	out := strings.ReplaceAll(sb.String(), "\r\n", "\n")
+	out = strings.ReplaceAll(out, "\n", "\r\n")
+	return os.WriteFile(path, []byte(out), 0644)
 }
 
 // updateModelDBCount replaces the count value in the header line.

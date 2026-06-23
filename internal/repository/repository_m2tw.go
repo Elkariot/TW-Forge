@@ -39,6 +39,7 @@ type M2TWGameRepository interface {
 	HardDeleteUnit(unitType string) error
 	CopyBattleModel(srcType, dstType string) error
 	DeleteBattleModel(unitType string) error
+	PatchSoldierFaction(soldierModel, srcFaction, dstFaction string) error
 	CopyUnitCard(srcUnitType, dstUnitType, srcFaction, dstFaction string) error
 	RenameUnitCard(oldType, newType, faction string) error
 	DeleteUnitAssets(unitType string) error
@@ -59,6 +60,7 @@ type M2TWWriter interface {
 	SaveM2TWBuildingsDraft(data domain.M2TWGameData) error
 	CopyBattleModelDraft(srcName, dstName string) error
 	DeleteBattleModelDraft(unitType string) error
+	PatchSoldierFactionDraft(soldierModel, srcFaction, dstFaction string) error
 	CopyUnitCardDraft(srcUnitType, dstUnitType, srcFaction, dstFaction string) error
 	RenameUnitCardDraft(oldType, newType, faction string) error
 	DeleteUnitAssets(unitType string) error
@@ -121,6 +123,13 @@ func (r *InMemoryM2TWRepository) CopyBattleModel(srcType, dstType string) error 
 		return fmt.Errorf("writer not configured")
 	}
 	return r.writer.CopyBattleModelDraft(srcType, dstType)
+}
+
+func (r *InMemoryM2TWRepository) PatchSoldierFaction(soldierModel, srcFaction, dstFaction string) error {
+	if r.writer == nil {
+		return nil
+	}
+	return r.writer.PatchSoldierFactionDraft(soldierModel, srcFaction, dstFaction)
 }
 
 func (r *InMemoryM2TWRepository) DeleteBattleModel(unitType string) error {

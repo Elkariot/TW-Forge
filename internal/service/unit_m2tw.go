@@ -93,6 +93,7 @@ func (s *M2TWUnitService) CopyUnit(unitType, faction string) (string, error) {
 
 	// Copy battle model entry — best-effort, не все юниты имеют запись в modeldb.
 	_ = s.repo.CopyBattleModel(unitType, newUnitType)
+	_ = s.repo.PatchSoldierFaction(unit.Soldier.Model, srcFaction, faction)
 	// Copy unit card icon by unit type: ui/units/[srcFaction]/#[srcType].tga → ui/units/[dstFaction]/#[dstType].TGA
 	_ = s.repo.CopyUnitCard(unitType, newUnitType, srcFaction, faction)
 
@@ -120,6 +121,8 @@ func (s *M2TWUnitService) CreateUnit(templateType, newType, faction string) erro
 	if err := s.repo.AddUnit(unit); err != nil {
 		return fmt.Errorf("ошибка создания юнита: %w", err)
 	}
+	_ = s.repo.CopyBattleModel(templateType, newType)
+	_ = s.repo.PatchSoldierFaction(unit.Soldier.Model, srcFaction, faction)
 	_ = s.repo.CopyUnitCard(templateType, newType, srcFaction, faction)
 	return s.repo.SaveDraft()
 }
