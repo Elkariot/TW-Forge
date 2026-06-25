@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"tw-forge/internal/repository"
 
 	"golang.org/x/text/encoding/unicode"
@@ -143,7 +144,11 @@ func (w *GameWriter) patchM2TWNames(srcPath, dstPath string, unitIndex map[strin
 		}
 	}
 
-	return bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return err
+	}
+	logger.FileWrite(dstPath, "write", "export_units.txt (M2TW)", 0)
+	return nil
 }
 
 func (w *GameWriter) createM2TWNamesFromScratch(dstPath string, unitIndex map[string]domain.M2TWUnit, changes map[string]repository.ChangeType) error {
@@ -166,7 +171,11 @@ func (w *GameWriter) createM2TWNamesFromScratch(dstPath string, unitIndex map[st
 		}
 	}
 
-	return bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return err
+	}
+	logger.FileWrite(dstPath, "write", "export_units.txt (M2TW, new)", 0)
+	return nil
 }
 
 // writeM2TWEnums патчит export_descr_unit_enums.txt: убирает удалённые записи, добавляет новые.
@@ -234,7 +243,11 @@ func (w *GameWriter) writeM2TWEnums(unitIndex map[string]domain.M2TWUnit, change
 		}
 	}
 
-	return os.WriteFile(dstPath, []byte(strings.Join(kept, "\r\n")+"\r\n"), 0644)
+	if err := os.WriteFile(dstPath, []byte(strings.Join(kept, "\r\n")+"\r\n"), 0644); err != nil {
+		return err
+	}
+	logger.FileWrite(dstPath, "write", "export_descr_unit_enums.txt", 0)
+	return nil
 }
 
 func writeM2TWUnitEntry(writeLine func(string), u domain.M2TWUnit) {

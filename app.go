@@ -5,34 +5,35 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"image/png"
 	"fmt"
+	"image/png"
 	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"tw-forge/internal/config"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"tw-forge/internal/parser"
 	"tw-forge/internal/repository"
 	"tw-forge/internal/service"
 	"tw-forge/internal/tgadecoder"
 	"tw-forge/internal/writer"
-	"sort"
-	"os"
-	"path/filepath"
-	"strings"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type AppConfig struct {
-	Game             int                          `json:"game"`
+	Game int `json:"game"`
 	// Per-game data (key = strconv.Itoa(config.GameVersion))
 	GamePaths        map[string]string            `json:"gamePaths,omitempty"`
 	SelectedModPaths map[string]string            `json:"selectedModPaths,omitempty"`
 	ManualMods       map[string]map[string]string `json:"manualMods,omitempty"`
 	// Legacy single-game fields (for backward compat with old config files)
-	LegacyGamePath   string                       `json:"gamePath,omitempty"`
-	LegacySelMod     string                       `json:"selectedModPath,omitempty"`
-	LegacyMods       map[string]string            `json:"legacyMods,omitempty"`
+	LegacyGamePath string            `json:"gamePath,omitempty"`
+	LegacySelMod   string            `json:"selectedModPath,omitempty"`
+	LegacyMods     map[string]string `json:"legacyMods,omitempty"`
 }
 
 func appConfigPath() (string, error) {
@@ -115,12 +116,17 @@ type App struct {
 	baseGameDataPath string // пустая если мод не выбран (gamePath и есть база)
 	gameVersion      config.GameVersion
 	generalService   *service.GeneralService
-	unitService      *service.UnitService
-	factionService   *service.FactionService
-	buildingService  *service.BuildingService
-	// M2TW services (non-nil only when gameVersion == config.Medieval)
+	// RTW
+	unitService     *service.UnitService
+	factionService  *service.FactionService
+	buildingService *service.BuildingService
+	rtwRepo         repository.GameRepository
+	// M2TW (non-nil only when gameVersion == config.Medieval)
 	m2twUnitService     *service.M2TWUnitService
 	m2twBuildingService *service.M2TWBuildingService
+	m2twRepo            repository.M2TWGameRepository
+	// Shared writer (non-nil after InitGame)
+	gameWriter *writer.GameWriter
 }
 
 func NewApp() *App {
@@ -129,6 +135,8 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	logger.Init(logger.DefaultPath())
+	logger.Info("tw-forge started")
 	a.generalService = service.NewGeneralService(nil)
 }
 
@@ -203,17 +211,18 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 	}
 
 	p := parser.New(gameVersion, gamePath)
-	w := writer.New(gamePath)
+	a.gameWriter = writer.New(gamePath)
 
 	if gameVersion == config.Medieval {
 		gameData, err := p.ParseM2TW()
 		if err != nil {
 			return err
 		}
-		repo := repository.NewM2TW(*gameData, w)
+		repo := repository.NewM2TW(*gameData)
+		a.m2twRepo = repo
 		a.m2twUnitService = service.NewM2TWUnitService(repo)
 		a.m2twBuildingService = service.NewM2TWBuildingService(repo)
-		// Clear RTW services
+		a.rtwRepo = nil
 		a.unitService = nil
 		a.factionService = nil
 		a.buildingService = nil
@@ -222,14 +231,16 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 		if err != nil {
 			return err
 		}
-		repo := repository.New(*gameData, w)
+		repo := repository.New(*gameData)
+		a.rtwRepo = repo
 		a.unitService = service.NewUnitService(repo)
 		a.factionService = service.NewFactionService(repo)
 		a.buildingService = service.NewBuildingService(repo)
-		// Clear M2TW services
+		a.m2twRepo = nil
 		a.m2twUnitService = nil
 		a.m2twBuildingService = nil
 	}
+	logger.Info("game loaded", "version", gameVersion, "path", gamePath)
 	return nil
 }
 
@@ -250,11 +261,25 @@ func (a *App) GetBuildings() []domain.BuildingGroup {
 }
 
 func (a *App) UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error {
-	return a.buildingService.UpdateBuildingLevel(groupName, levelName, slots)
+	logger.OpStart("update_building_level", fmt.Sprintf("%s/%s", groupName, levelName))
+	if err := a.buildingService.UpdateBuildingLevel(groupName, levelName, slots); err != nil {
+		logger.OpDone("update_building_level", err)
+		return err
+	}
+	err := a.gameWriter.SaveBuildingsDraft(a.rtwRepo.GetData())
+	logger.OpDone("update_building_level", err)
+	return err
 }
 
 func (a *App) UpdateBuildingLevelProps(groupName, levelName string, cost, construction int, settlementMin string, requiredCultures []string, dependencyGroup, dependencyLevel string, upgrades, bonusLines []string) error {
-	return a.buildingService.UpdateBuildingLevelProps(groupName, levelName, cost, construction, settlementMin, requiredCultures, dependencyGroup, dependencyLevel, upgrades, bonusLines)
+	logger.OpStart("update_building_level_props", fmt.Sprintf("%s/%s", groupName, levelName))
+	if err := a.buildingService.UpdateBuildingLevelProps(groupName, levelName, cost, construction, settlementMin, requiredCultures, dependencyGroup, dependencyLevel, upgrades, bonusLines); err != nil {
+		logger.OpDone("update_building_level_props", err)
+		return err
+	}
+	err := a.gameWriter.SaveBuildingsDraft(a.rtwRepo.GetData())
+	logger.OpDone("update_building_level_props", err)
+	return err
 }
 
 func (a *App) RevertBuildings() error {
@@ -270,7 +295,17 @@ func (a *App) GetUnitByType(unitType string) (*domain.Unit, error) {
 }
 
 func (a *App) UpdateUnit(originalType string, unit domain.Unit) error {
-	return a.unitService.Update(originalType, unit)
+	logger.OpStart("update_unit", unit.Type)
+	if err := a.unitService.Update(originalType, unit); err != nil {
+		logger.OpDone("update_unit", err)
+		return err
+	}
+	if originalType != unit.Type && len(unit.Ownership) > 0 {
+		_ = a.gameWriter.RenameUnitIcon(originalType, unit.Type, unit.Ownership[0])
+	}
+	err := a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges())
+	logger.OpDone("update_unit", err)
+	return err
 }
 
 func (a *App) HasUnsavedChanges() bool {
@@ -278,7 +313,14 @@ func (a *App) HasUnsavedChanges() bool {
 }
 
 func (a *App) Save() error {
-	return a.unitService.Save()
+	logger.OpStart("save", "apply to game")
+	if err := a.gameWriter.Apply(); err != nil {
+		logger.OpDone("save", err)
+		return err
+	}
+	a.rtwRepo.CommitSave()
+	logger.OpDone("save", nil)
+	return nil
 }
 
 // Validate возвращает список проблем юнита или пустой срез если всё ок.
@@ -299,11 +341,32 @@ func (a *App) GetUnitBuildings(unitType string) []domain.RecruitLocation {
 }
 
 func (a *App) CopyUnit(unitType, faction string) (string, error) {
-	return a.unitService.CopyUnit(unitType, faction)
+	logger.OpStart("copy_unit", fmt.Sprintf("%s → %s", unitType, faction))
+	srcFaction := a.unitService.FirstFaction(unitType)
+	soldierModel := a.unitService.SoldierModel(unitType)
+	newType, err := a.unitService.CopyUnit(unitType, faction)
+	if err != nil {
+		logger.OpDone("copy_unit", err)
+		return "", err
+	}
+	_ = a.gameWriter.CopyUnitModelAssets(soldierModel, unitType, newType, srcFaction, faction)
+	err = a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges())
+	logger.OpDone("copy_unit", err)
+	return newType, err
 }
 
 func (a *App) CreateUnit(templateType, newType, faction string) error {
-	return a.unitService.CreateUnit(templateType, newType, faction)
+	logger.OpStart("create_unit", fmt.Sprintf("%s from %s", newType, templateType))
+	srcFaction := a.unitService.FirstFaction(templateType)
+	soldierModel := a.unitService.SoldierModel(templateType)
+	if err := a.unitService.CreateUnit(templateType, newType, faction); err != nil {
+		logger.OpDone("create_unit", err)
+		return err
+	}
+	_ = a.gameWriter.CopyUnitModelAssets(soldierModel, templateType, newType, srcFaction, faction)
+	err := a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges())
+	logger.OpDone("create_unit", err)
+	return err
 }
 
 func (a *App) GetUnitChangeType(unitType string) string {
@@ -311,11 +374,40 @@ func (a *App) GetUnitChangeType(unitType string) string {
 }
 
 func (a *App) DeleteUnit(unitType, faction string) error {
-	return a.unitService.Delete(unitType, faction)
+	logger.OpStart("delete_unit", fmt.Sprintf("%s from %s", unitType, faction))
+	if err := a.unitService.Delete(unitType, faction); err != nil {
+		logger.OpDone("delete_unit", err)
+		return err
+	}
+	if err := a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges()); err != nil {
+		logger.OpDone("delete_unit", err)
+		return err
+	}
+	var err error
+	if a.rtwRepo.IsBuildingsDirty() {
+		err = a.gameWriter.SaveBuildingsDraft(a.rtwRepo.GetData())
+	}
+	logger.OpDone("delete_unit", err)
+	return err
 }
 
 func (a *App) HardDeleteUnit(unitType string) error {
-	return a.unitService.HardDelete(unitType)
+	logger.OpStart("hard_delete_unit", unitType)
+	_ = a.gameWriter.DeleteUnitAssets(unitType)
+	if err := a.unitService.HardDelete(unitType); err != nil {
+		logger.OpDone("hard_delete_unit", err)
+		return err
+	}
+	if err := a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges()); err != nil {
+		logger.OpDone("hard_delete_unit", err)
+		return err
+	}
+	var err error
+	if a.rtwRepo.IsBuildingsDirty() {
+		err = a.gameWriter.SaveBuildingsDraft(a.rtwRepo.GetData())
+	}
+	logger.OpDone("hard_delete_unit", err)
+	return err
 }
 
 func (a *App) IsCopyUnit(unitType string) bool {
@@ -577,35 +669,97 @@ func (a *App) UpdateM2TWUnit(originalType string, unit domain.M2TWUnit) error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.Update(originalType, unit)
+	logger.OpStart("update_m2tw_unit", unit.Type)
+	if err := a.m2twUnitService.Update(originalType, unit); err != nil {
+		logger.OpDone("update_m2tw_unit", err)
+		return err
+	}
+	if originalType != unit.Type && len(unit.Ownership) > 0 {
+		_ = a.gameWriter.RenameUnitCardDraft(originalType, unit.Type, unit.Ownership[0])
+	}
+	err := a.gameWriter.SaveM2TWDraft(a.m2twRepo.GetData(), a.m2twRepo.GetChanges())
+	logger.OpDone("update_m2tw_unit", err)
+	return err
 }
 
 func (a *App) CopyM2TWUnit(unitType, faction string) (string, error) {
 	if a.m2twUnitService == nil {
 		return "", fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.CopyUnit(unitType, faction)
+	logger.OpStart("copy_m2tw_unit", fmt.Sprintf("%s → %s", unitType, faction))
+	newType, srcFaction, soldierModel, err := a.m2twUnitService.CopyUnit(unitType, faction)
+	if err != nil {
+		logger.OpDone("copy_m2tw_unit", err)
+		return "", err
+	}
+	_ = a.gameWriter.CopyBattleModelDraft(unitType, newType)
+	_ = a.gameWriter.PatchSoldierFactionDraft(soldierModel, srcFaction, faction)
+	_ = a.gameWriter.CopyUnitCardDraft(unitType, newType, srcFaction, faction)
+	err = a.gameWriter.SaveM2TWDraft(a.m2twRepo.GetData(), a.m2twRepo.GetChanges())
+	logger.OpDone("copy_m2tw_unit", err)
+	return newType, err
 }
 
 func (a *App) CreateM2TWUnit(templateType, newType, faction string) error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.CreateUnit(templateType, newType, faction)
+	logger.OpStart("create_m2tw_unit", fmt.Sprintf("%s from %s", newType, templateType))
+	srcFaction, soldierModel, err := a.m2twUnitService.CreateUnit(templateType, newType, faction)
+	if err != nil {
+		logger.OpDone("create_m2tw_unit", err)
+		return err
+	}
+	_ = a.gameWriter.CopyBattleModelDraft(templateType, newType)
+	_ = a.gameWriter.PatchSoldierFactionDraft(soldierModel, srcFaction, faction)
+	_ = a.gameWriter.CopyUnitCardDraft(templateType, newType, srcFaction, faction)
+	err = a.gameWriter.SaveM2TWDraft(a.m2twRepo.GetData(), a.m2twRepo.GetChanges())
+	logger.OpDone("create_m2tw_unit", err)
+	return err
 }
 
 func (a *App) DeleteM2TWUnit(unitType, faction string) error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.Delete(unitType, faction)
+	logger.OpStart("delete_m2tw_unit", fmt.Sprintf("%s from %s", unitType, faction))
+	if err := a.m2twUnitService.Delete(unitType, faction); err != nil {
+		logger.OpDone("delete_m2tw_unit", err)
+		return err
+	}
+	if err := a.gameWriter.SaveM2TWDraft(a.m2twRepo.GetData(), a.m2twRepo.GetChanges()); err != nil {
+		logger.OpDone("delete_m2tw_unit", err)
+		return err
+	}
+	var err error
+	if a.m2twRepo.IsBuildingsDirty() {
+		err = a.gameWriter.SaveM2TWBuildingsDraft(a.m2twRepo.GetData())
+	}
+	logger.OpDone("delete_m2tw_unit", err)
+	return err
 }
 
 func (a *App) HardDeleteM2TWUnit(unitType string) error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.HardDelete(unitType)
+	logger.OpStart("hard_delete_m2tw_unit", unitType)
+	_ = a.gameWriter.DeleteUnitAssets(unitType)
+	_ = a.gameWriter.DeleteBattleModelDraft(unitType)
+	if err := a.m2twUnitService.HardDelete(unitType); err != nil {
+		logger.OpDone("hard_delete_m2tw_unit", err)
+		return err
+	}
+	if err := a.gameWriter.SaveM2TWDraft(a.m2twRepo.GetData(), a.m2twRepo.GetChanges()); err != nil {
+		logger.OpDone("hard_delete_m2tw_unit", err)
+		return err
+	}
+	var err error
+	if a.m2twRepo.IsBuildingsDirty() {
+		err = a.gameWriter.SaveM2TWBuildingsDraft(a.m2twRepo.GetData())
+	}
+	logger.OpDone("hard_delete_m2tw_unit", err)
+	return err
 }
 
 func (a *App) RevertM2TWUnit(unitType string) error {
@@ -643,7 +797,14 @@ func (a *App) SaveM2TW() error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twUnitService.Save()
+	logger.OpStart("save_m2tw", "apply to game")
+	if err := a.gameWriter.Apply(); err != nil {
+		logger.OpDone("save_m2tw", err)
+		return err
+	}
+	a.m2twRepo.CommitSave()
+	logger.OpDone("save_m2tw", nil)
+	return nil
 }
 
 func (a *App) GetM2TWBuildings() []domain.M2TWBuildingGroup {
@@ -664,14 +825,28 @@ func (a *App) UpdateM2TWBuildingLevel(groupName, levelName string, pools []domai
 	if a.m2twBuildingService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twBuildingService.UpdateBuildingLevel(groupName, levelName, pools, bonusLines)
+	logger.OpStart("update_m2tw_building_level", fmt.Sprintf("%s/%s", groupName, levelName))
+	if err := a.m2twBuildingService.UpdateBuildingLevel(groupName, levelName, pools, bonusLines); err != nil {
+		logger.OpDone("update_m2tw_building_level", err)
+		return err
+	}
+	err := a.gameWriter.SaveM2TWBuildingsDraft(a.m2twRepo.GetData())
+	logger.OpDone("update_m2tw_building_level", err)
+	return err
 }
 
 func (a *App) UpdateM2TWBuildingLevelProps(groupName, levelName string, cost, construction, convertTo int, settlementMin, settlementType string, requiredFactions []string, dependencyGroup, dependencyLevel string, upgrades []string) error {
 	if a.m2twBuildingService == nil {
 		return fmt.Errorf("M2TW not loaded")
 	}
-	return a.m2twBuildingService.UpdateBuildingLevelProps(groupName, levelName, cost, construction, convertTo, settlementMin, settlementType, requiredFactions, dependencyGroup, dependencyLevel, upgrades)
+	logger.OpStart("update_m2tw_building_level_props", fmt.Sprintf("%s/%s", groupName, levelName))
+	if err := a.m2twBuildingService.UpdateBuildingLevelProps(groupName, levelName, cost, construction, convertTo, settlementMin, settlementType, requiredFactions, dependencyGroup, dependencyLevel, upgrades); err != nil {
+		logger.OpDone("update_m2tw_building_level_props", err)
+		return err
+	}
+	err := a.gameWriter.SaveM2TWBuildingsDraft(a.m2twRepo.GetData())
+	logger.OpDone("update_m2tw_building_level_props", err)
+	return err
 }
 
 func (a *App) RevertM2TWBuildings() error {

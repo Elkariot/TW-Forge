@@ -100,8 +100,5 @@ func (r *InMemoryM2TWRepository) RevertBuildings() error {
 	r.working.Buildings = orig.Buildings
 	r.working.UnitRecruitIndex = domain.BuildM2TWRecruitIndex(r.working.Buildings)
 	r.buildingsDirty = false
-	if r.writer == nil {
-		return nil
-	}
-	return r.writer.SaveM2TWBuildingsDraft(r.working)
+	return nil
 }

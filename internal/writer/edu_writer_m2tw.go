@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"tw-forge/internal/repository"
 	"os"
 	"path/filepath"
@@ -103,5 +104,9 @@ func (w *GameWriter) patchM2TWEDU(dst string, data domain.M2TWGameData, changes 
 		}
 	}
 
-	return bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return err
+	}
+	logger.FileWrite(dst, "write", "export_descr_unit.txt (M2TW)", 0)
+	return nil
 }

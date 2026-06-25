@@ -91,8 +91,5 @@ func (r *InMemoryRepository) RevertBuildings() error {
 	r.working.UnitRecruitIndex = domain.BuildRecruitIndex(r.working.Buildings)
 	r.working.CultureBuildingIndex = domain.BuildCultureBuildingIndex(r.working.Buildings)
 	r.buildingsDirty = false
-	if r.writer == nil {
-		return nil
-	}
-	return r.writer.SaveBuildingsDraft(r.working)
+	return nil
 }

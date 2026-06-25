@@ -2,9 +2,9 @@ package service
 
 import (
 	"fmt"
+	"strings"
 	"tw-forge/internal/domain"
 	"tw-forge/internal/repository"
-	"strings"
 )
 
 type UnitService struct {
@@ -13,36 +13,6 @@ type UnitService struct {
 
 func NewUnitService(repo repository.GameRepository) *UnitService {
 	return &UnitService{repo: repo}
-}
-
-// copyRecruitSlots копирует рекрут-слоты оригинального юнита во все здания,
-// добавляя новый слот для dstType с фракцией dstFaction.
-func (s *UnitService) copyRecruitSlots(srcType, dstType, dstFaction string) {
-	locs := s.repo.GetUnitBuildings(srcType)
-	for _, loc := range locs {
-		bg, ok := s.repo.GetBuildingByName(loc.GroupName)
-		if !ok {
-			continue
-		}
-		for _, lvl := range bg.Levels {
-			if lvl.Name != loc.LevelName {
-				continue
-			}
-			for _, slot := range lvl.RecruitSlots {
-				if slot.UnitType != srcType {
-					continue
-				}
-				newSlots := append(lvl.RecruitSlots, domain.RecruitSlot{
-					UnitType:     dstType,
-					Level:        slot.Level,
-					Requirements: []string{dstFaction},
-					Conditions:   slot.Conditions,
-				})
-				_ = s.repo.UpdateBuildingLevel(loc.GroupName, loc.LevelName, newSlots)
-				break
-			}
-		}
-	}
 }
 
 func (s *UnitService) GetAllUnits() []domain.Unit {
@@ -83,51 +53,28 @@ func (s *UnitService) GetUnitByType(unitType string) (*domain.Unit, error) {
 }
 
 func (s *UnitService) Update(originalType string, unit domain.Unit) error {
-	if err := s.repo.UpdateUnit(originalType, unit); err != nil {
-		return err
-	}
-	if originalType != unit.Type && len(unit.Ownership) > 0 {
-		_ = s.repo.RenameUnitIcon(originalType, unit.Type, unit.Ownership[0])
-	}
-	return s.repo.SaveDraft()
+	return s.repo.UpdateUnit(originalType, unit)
 }
 
 func (s *UnitService) Create(unit domain.Unit) error {
 	if _, exists := s.repo.GetUnitByType(unit.Type); exists {
 		return fmt.Errorf("unit type already in use: %s", unit.Type)
 	}
-
-	if err := s.repo.AddUnit(unit); err != nil {
-		return err
-	}
-	return s.repo.SaveDraft()
+	return s.repo.AddUnit(unit)
 }
 
 func (s *UnitService) Delete(unitType, faction string) error {
 	if _, exists := s.repo.GetUnitByType(unitType); !exists {
 		return fmt.Errorf("unit type not found: %s", unitType)
 	}
-	if err := s.repo.DeleteUnit(unitType, faction); err != nil {
-		return err
-	}
-	if err := s.repo.SaveDraft(); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.DeleteUnit(unitType, faction)
 }
 
 func (s *UnitService) HardDelete(unitType string) error {
 	if _, exists := s.repo.GetUnitByType(unitType); !exists {
 		return fmt.Errorf("unit type not found: %s", unitType)
 	}
-	_ = s.repo.DeleteUnitAssets(unitType)
-	if err := s.repo.HardDeleteUnit(unitType); err != nil {
-		return err
-	}
-	if err := s.repo.SaveDraft(); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.HardDeleteUnit(unitType)
 }
 
 func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
@@ -135,13 +82,6 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("unit not found")
 	}
-
-	// Запоминаем исходную фракцию до изменения ownership
-	srcFaction := ""
-	if len(unit.Ownership) > 0 {
-		srcFaction = unit.Ownership[0]
-	}
-	soldierModel := unit.Soldier.Model
 
 	base := fmt.Sprintf("%s copy", unit.Type)
 	newUnitType := base
@@ -160,13 +100,23 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 		return "", fmt.Errorf("error copying unit: %w", err)
 	}
 
-	// Копируем иконку (по типу юнита) и добавляем texture-запись в descr_model_battle.txt
-	_ = s.repo.CopyUnitModelAssets(soldierModel, unitType, newUnitType, srcFaction, faction)
-
-	if err := s.repo.SaveDraft(); err != nil {
-		return "", err
-	}
 	return newUnitType, nil
+}
+
+// SoldierModel returns the soldier model of a unit — needed by app.go to pass to writer.
+func (s *UnitService) SoldierModel(unitType string) string {
+	if u, ok := s.repo.GetUnitByType(unitType); ok {
+		return u.Soldier.Model
+	}
+	return ""
+}
+
+// FirstFaction returns the first faction of a unit — needed by app.go for icon rename.
+func (s *UnitService) FirstFaction(unitType string) string {
+	if u, ok := s.repo.GetUnitByType(unitType); ok && len(u.Ownership) > 0 {
+		return u.Ownership[0]
+	}
+	return ""
 }
 
 func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
@@ -178,22 +128,10 @@ func (s *UnitService) CreateUnit(templateType, newType, faction string) error {
 		return fmt.Errorf("template %q not found", templateType)
 	}
 
-	srcFaction := ""
-	if len(unit.Ownership) > 0 {
-		srcFaction = unit.Ownership[0]
-	}
-	soldierModel := unit.Soldier.Model
-
 	unit.Type = newType
 	unit.Dictionary = strings.ReplaceAll(newType, " ", "_")
 	unit.Ownership = []string{faction}
-	if err := s.repo.AddUnit(unit); err != nil {
-		return fmt.Errorf("failed to create unit: %w", err)
-	}
-
-	_ = s.repo.CopyUnitModelAssets(soldierModel, templateType, newType, srcFaction, faction)
-
-	return s.repo.SaveDraft()
+	return s.repo.AddUnit(unit)
 }
 
 func (s *UnitService) Revert(unitType string) error {
@@ -211,7 +149,6 @@ func (s *UnitService) GetUnitChangeType(unitType string) string {
 	}
 	switch ct {
 	case repository.ChangeModified:
-		// Отличаем мягкое удаление от обычной правки
 		if u, exists := s.repo.GetUnitByType(unitType); exists && u.IsDeleted {
 			return "deleted"
 		}
@@ -260,8 +197,4 @@ func (s *UnitService) Validate(unit domain.Unit, originalType string) []string {
 
 func (s *UnitService) HasUnsavedChanges() bool {
 	return s.repo.HasUnsavedChanges()
-}
-
-func (s *UnitService) Save() error {
-	return s.repo.Save()
 }
