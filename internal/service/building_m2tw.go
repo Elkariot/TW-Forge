@@ -51,17 +51,11 @@ func (s *M2TWBuildingService) GetHiddenResources() []string {
 }
 
 func (s *M2TWBuildingService) UpdateBuildingLevel(groupName, levelName string, pools []domain.M2TWRecruitPool, bonusLines []string) error {
-	if err := s.repo.UpdateBuildingLevel(groupName, levelName, pools, bonusLines); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.UpdateBuildingLevel(groupName, levelName, pools, bonusLines)
 }
 
 func (s *M2TWBuildingService) UpdateBuildingLevelProps(groupName, levelName string, cost, construction, convertTo int, settlementMin, settlementType string, requiredFactions []string, dependencyGroup, dependencyLevel string, upgrades []string) error {
-	if err := s.repo.UpdateBuildingLevelProps(groupName, levelName, cost, construction, convertTo, settlementMin, settlementType, requiredFactions, dependencyGroup, dependencyLevel, upgrades); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.UpdateBuildingLevelProps(groupName, levelName, cost, construction, convertTo, settlementMin, settlementType, requiredFactions, dependencyGroup, dependencyLevel, upgrades)
 }
 
 func (s *M2TWBuildingService) RevertBuildings() error {

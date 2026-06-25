@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"tw-forge/internal/logger"
 )
 
 // CopyUnitModelAssets добавляет texture/model_sprite записи в descr_model_battle.txt
@@ -52,7 +53,11 @@ func (w *GameWriter) patchDescBattleModels(soldierModel, srcFaction, dstFaction 
 	if !changed {
 		return nil
 	}
-	return os.WriteFile(draftPath, []byte(patched), 0644)
+	if err := os.WriteFile(draftPath, []byte(patched), 0644); err != nil {
+		return err
+	}
+	logger.FileWrite(draftPath, "patch", "descr_model_battle.txt", 0)
+	return nil
 }
 
 func addFactionModelEntries(content, soldierModel, srcFaction, dstFaction string) (string, bool) {
@@ -332,6 +337,7 @@ func (w *GameWriter) renameUnitIconDraft(oldType, newType, faction, unitsRoot st
 	if err := w.ensureInit(); err != nil {
 		return err
 	}
+
 	unitsDir := filepath.Join(w.gamePath, unitsRoot, "units")
 	iconData := findUnitIconData(unitsDir, oldType, faction)
 	if iconData != nil {
@@ -340,7 +346,11 @@ func (w *GameWriter) renameUnitIconDraft(oldType, newType, faction, unitsRoot st
 		if err := os.MkdirAll(dstDir, 0755); err != nil {
 			return err
 		}
-		_ = os.WriteFile(filepath.Join(dstDir, dstName), iconData, 0644)
+
+		file := filepath.Join(dstDir, dstName)
+		_ = os.WriteFile(file, iconData, 0644)
+
+		logger.FileWrite(file, "rename", file, 0)
 	}
 	// Для RTW также переименовываем портрет юнита (_info.tga)
 	if strings.ToUpper(unitsRoot) == "UI" {

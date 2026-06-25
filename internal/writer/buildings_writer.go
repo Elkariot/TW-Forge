@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -234,7 +235,11 @@ func (w *GameWriter) patchBuildings(dst string, data domain.GameData) error {
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("scan buildings: %w", err)
 	}
-	return bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return err
+	}
+	logger.FileWrite(dst, "write", "export_descr_buildings.txt", 0)
+	return nil
 }
 
 func formatLevelDefinition(name string, lvl domain.BuildingLevel) string {

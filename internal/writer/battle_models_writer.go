@@ -3,6 +3,7 @@ package writer
 import (
 	"fmt"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"os"
 	"strconv"
 	"strings"
@@ -67,7 +68,11 @@ func WriteBattleModels(db *domain.BattleModelsDB, path string) error {
 	// M2TW battle_models.modeldb requires CRLF line endings (Boost serialization format).
 	out := strings.ReplaceAll(sb.String(), "\r\n", "\n")
 	out = strings.ReplaceAll(out, "\n", "\r\n")
-	return os.WriteFile(path, []byte(out), 0644)
+	if err := os.WriteFile(path, []byte(out), 0644); err != nil {
+		return err
+	}
+	logger.FileWrite(path, "write", "battle_models.modeldb", 0)
+	return nil
 }
 
 // updateModelDBCount replaces the count value in the header line.
