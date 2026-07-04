@@ -121,6 +121,8 @@ type App struct {
 	// M2TW services (non-nil only when gameVersion == config.Medieval)
 	m2twUnitService     *service.M2TWUnitService
 	m2twBuildingService *service.M2TWBuildingService
+	// Shared between RTW and M2TW: descr_projectile.txt format is identical.
+	projectileService *service.ProjectileService
 }
 
 func NewApp() *App {
@@ -204,6 +206,12 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 
 	p := parser.New(gameVersion, gamePath)
 	w := writer.New(gamePath)
+
+	projectileFile, err := parser.ParseProjectileFile(gamePath)
+	if err != nil {
+		return fmt.Errorf("parse projectiles error: %w", err)
+	}
+	a.projectileService = service.NewProjectileService(repository.NewProjectile(*projectileFile, w))
 
 	if gameVersion == config.Medieval {
 		gameData, err := p.ParseM2TW()
@@ -296,6 +304,52 @@ func (a *App) GetProjectileTypes() []string {
 
 func (a *App) GetUnitBuildings(unitType string) []domain.RecruitLocation {
 	return a.buildingService.GetUnitBuilding(unitType)
+}
+
+// ── Projectiles (shared between RTW and M2TW) ────────────────────────────────
+
+func (a *App) GetProjectiles() []domain.Projectile {
+	return a.projectileService.GetAll()
+}
+
+func (a *App) GetProjectileDelays() []domain.ProjectileDelay {
+	return a.projectileService.GetDelays()
+}
+
+func (a *App) GetProjectileByName(name string) (*domain.Projectile, error) {
+	return a.projectileService.GetByName(name)
+}
+
+func (a *App) GetProjectileChangeType(name string) string {
+	return a.projectileService.GetChangeType(name)
+}
+
+func (a *App) UpdateProjectile(originalName string, p domain.Projectile) error {
+	return a.projectileService.Update(originalName, p)
+}
+
+func (a *App) CreateProjectile(templateName, newName string) error {
+	return a.projectileService.Create(templateName, newName)
+}
+
+func (a *App) DeleteProjectile(name string) error {
+	return a.projectileService.Delete(name)
+}
+
+func (a *App) RevertProjectile(name string) error {
+	return a.projectileService.Revert(name)
+}
+
+func (a *App) RevertAllProjectiles() {
+	a.projectileService.RevertAll()
+}
+
+func (a *App) ProjectilesHaveUnsavedChanges() bool {
+	return a.projectileService.HasUnsavedChanges()
+}
+
+func (a *App) SaveProjectiles() error {
+	return a.projectileService.Save()
 }
 
 func (a *App) CopyUnit(unitType, faction string) (string, error) {
