@@ -15,6 +15,8 @@ var managedFiles = []string{
 	"export_descr_unit_enums.txt",
 	"export_descr_buildings.txt",
 	filepath.Join("text", "export_units.txt"),
+	"descr_projectile.txt",
+	"descr_projectile_new.txt",
 }
 
 type GameWriter struct {
@@ -80,6 +82,14 @@ func (w *GameWriter) Apply() error {
 	if _, err := os.Stat(draftEnums); err == nil {
 		if err := w.applyFile("export_descr_unit_enums.txt"); err != nil {
 			return err
+		}
+	}
+	for _, name := range []string{"descr_projectile.txt", "descr_projectile_new.txt"} {
+		draftProjectiles := filepath.Join(w.draftPath, name)
+		if _, err := os.Stat(draftProjectiles); err == nil {
+			if err := w.applyFile(name); err != nil {
+				return err
+			}
 		}
 	}
 	modelDBRel := w.modelDBRelPath()
