@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -217,7 +218,11 @@ func (w *GameWriter) patchM2TWBuildings(dst string, data domain.M2TWGameData) er
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("scan M2TW buildings: %w", err)
 	}
-	return bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return err
+	}
+	logger.FileWrite(dst, "write", "export_descr_buildings.txt (M2TW)", 0)
+	return nil
 }
 
 func formatM2TWLevelDefinition(name string, lvl domain.M2TWBuildingLevel) string {

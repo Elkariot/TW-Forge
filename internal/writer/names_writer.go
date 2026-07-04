@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"tw-forge/internal/domain"
+	"tw-forge/internal/logger"
 	"tw-forge/internal/repository"
 	"os"
 	"path/filepath"
@@ -157,6 +158,7 @@ func (w *GameWriter) patchNames(dst string, data domain.GameData, changes map[st
 	if err := bw.Flush(); err != nil {
 		return fmt.Errorf("flush draft names: %w", err)
 	}
+	logger.FileWrite(dst, "write", "export_units.txt", 0)
 	return nil
 }
 

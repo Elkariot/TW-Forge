@@ -49,17 +49,11 @@ func (s *BuildingService) GetFactionBuildings(faction string) ([]domain.Building
 }
 
 func (s *BuildingService) UpdateBuildingLevel(groupName, levelName string, slots []domain.RecruitSlot) error {
-	if err := s.repo.UpdateBuildingLevel(groupName, levelName, slots); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.UpdateBuildingLevel(groupName, levelName, slots)
 }
 
 func (s *BuildingService) UpdateBuildingLevelProps(groupName, levelName string, cost, construction int, settlementMin string, requiredCultures []string, dependencyGroup, dependencyLevel string, upgrades, bonusLines []string) error {
-	if err := s.repo.UpdateBuildingLevelProps(groupName, levelName, cost, construction, settlementMin, requiredCultures, dependencyGroup, dependencyLevel, upgrades, bonusLines); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.UpdateBuildingLevelProps(groupName, levelName, cost, construction, settlementMin, requiredCultures, dependencyGroup, dependencyLevel, upgrades, bonusLines)
 }
 
 func (s *BuildingService) RevertBuildings() error {

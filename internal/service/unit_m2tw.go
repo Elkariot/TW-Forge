@@ -51,108 +51,83 @@ func (s *M2TWUnitService) GetUnitByType(unitType string) (*domain.M2TWUnit, erro
 }
 
 func (s *M2TWUnitService) Update(originalType string, unit domain.M2TWUnit) error {
-	if err := s.repo.UpdateUnit(originalType, unit); err != nil {
-		return err
-	}
-	if originalType != unit.Type && len(unit.Ownership) > 0 {
-		_ = s.repo.RenameUnitCard(originalType, unit.Type, unit.Ownership[0])
-	}
-	return s.repo.SaveDraft()
+	return s.repo.UpdateUnit(originalType, unit)
 }
 
-func (s *M2TWUnitService) CopyUnit(unitType, faction string) (string, error) {
+// TypeRenamed reports whether the type name changed — app.go uses this to decide whether to rename the icon.
+func (s *M2TWUnitService) TypeRenamed(originalType string, unit domain.M2TWUnit) bool {
+	return originalType != unit.Type
+}
+
+func (s *M2TWUnitService) CopyUnit(unitType, faction string) (newType string, srcFaction string, soldierModel string, err error) {
 	unit, ok := s.repo.GetUnitByType(unitType)
 	if !ok {
-		return "", fmt.Errorf("unit not found: %s", unitType)
+		return "", "", "", fmt.Errorf("unit not found: %s", unitType)
 	}
 
 	base := fmt.Sprintf("%s copy", unit.Type)
-	newUnitType := base
+	newType = base
 	for i := 2; ; i++ {
-		if _, exists := s.repo.GetUnitByType(newUnitType); !exists {
+		if _, exists := s.repo.GetUnitByType(newType); !exists {
 			break
 		}
-		newUnitType = fmt.Sprintf("%s %d", base, i)
+		newType = fmt.Sprintf("%s %d", base, i)
 	}
 
-	srcFaction := ""
 	if len(unit.Ownership) > 0 {
 		srcFaction = unit.Ownership[0]
 	}
+	soldierModel = unit.Soldier.Model
 
-	unit.Type = newUnitType
-	unit.Dictionary = strings.ReplaceAll(newUnitType, " ", "_")
-	unit.Ownership = []string{faction}
-	if len(unit.Eras) > 0 {
-		unit.Eras = map[string][]string{"0": {faction}, "1": {faction}, "2": {faction}}
-	}
-
-	if err := s.repo.AddUnit(unit); err != nil {
-		return "", fmt.Errorf("error copying unit: %w", err)
-	}
-
-	// Copy battle model entry — best-effort, не все юниты имеют запись в modeldb.
-	_ = s.repo.CopyBattleModel(unitType, newUnitType)
-	_ = s.repo.PatchSoldierFaction(unit.Soldier.Model, srcFaction, faction)
-	// Copy unit card icon by unit type: ui/units/[srcFaction]/#[srcType].tga → ui/units/[dstFaction]/#[dstType].TGA
-	_ = s.repo.CopyUnitCard(unitType, newUnitType, srcFaction, faction)
-
-	return newUnitType, s.repo.SaveDraft()
-}
-
-func (s *M2TWUnitService) CreateUnit(templateType, newType, faction string) error {
-	if _, exists := s.repo.GetUnitByType(newType); exists {
-		return fmt.Errorf("unit with type %q already exists", newType)
-	}
-	unit, ok := s.repo.GetUnitByType(templateType)
-	if !ok {
-		return fmt.Errorf("template %q not found", templateType)
-	}
-	srcFaction := ""
-	if len(unit.Ownership) > 0 {
-		srcFaction = unit.Ownership[0]
-	}
 	unit.Type = newType
 	unit.Dictionary = strings.ReplaceAll(newType, " ", "_")
 	unit.Ownership = []string{faction}
 	if len(unit.Eras) > 0 {
 		unit.Eras = map[string][]string{"0": {faction}, "1": {faction}, "2": {faction}}
 	}
-	if err := s.repo.AddUnit(unit); err != nil {
-		return fmt.Errorf("failed to create unit: %w", err)
+
+	if err = s.repo.AddUnit(unit); err != nil {
+		return "", "", "", fmt.Errorf("error copying unit: %w", err)
 	}
-	_ = s.repo.CopyBattleModel(templateType, newType)
-	_ = s.repo.PatchSoldierFaction(unit.Soldier.Model, srcFaction, faction)
-	_ = s.repo.CopyUnitCard(templateType, newType, srcFaction, faction)
-	return s.repo.SaveDraft()
+	return newType, srcFaction, soldierModel, nil
+}
+
+func (s *M2TWUnitService) CreateUnit(templateType, newType, faction string) (srcFaction string, soldierModel string, err error) {
+	if _, exists := s.repo.GetUnitByType(newType); exists {
+		return "", "", fmt.Errorf("unit with type %q already exists", newType)
+	}
+	unit, ok := s.repo.GetUnitByType(templateType)
+	if !ok {
+		return "", "", fmt.Errorf("template %q not found", templateType)
+	}
+	if len(unit.Ownership) > 0 {
+		srcFaction = unit.Ownership[0]
+	}
+	soldierModel = unit.Soldier.Model
+	unit.Type = newType
+	unit.Dictionary = strings.ReplaceAll(newType, " ", "_")
+	unit.Ownership = []string{faction}
+	if len(unit.Eras) > 0 {
+		unit.Eras = map[string][]string{"0": {faction}, "1": {faction}, "2": {faction}}
+	}
+	if err = s.repo.AddUnit(unit); err != nil {
+		return "", "", fmt.Errorf("failed to create unit: %w", err)
+	}
+	return srcFaction, soldierModel, nil
 }
 
 func (s *M2TWUnitService) Delete(unitType, faction string) error {
 	if _, exists := s.repo.GetUnitByType(unitType); !exists {
 		return fmt.Errorf("unit type not found: %s", unitType)
 	}
-	if err := s.repo.DeleteUnit(unitType, faction); err != nil {
-		return err
-	}
-	if err := s.repo.SaveDraft(); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.DeleteUnit(unitType, faction)
 }
 
 func (s *M2TWUnitService) HardDelete(unitType string) error {
 	if _, exists := s.repo.GetUnitByType(unitType); !exists {
 		return fmt.Errorf("unit type not found: %s", unitType)
 	}
-	_ = s.repo.DeleteUnitAssets(unitType)
-	_ = s.repo.DeleteBattleModel(unitType)
-	if err := s.repo.HardDeleteUnit(unitType); err != nil {
-		return err
-	}
-	if err := s.repo.SaveDraft(); err != nil {
-		return err
-	}
-	return s.repo.SaveBuildingsDraft()
+	return s.repo.HardDeleteUnit(unitType)
 }
 
 func (s *M2TWUnitService) Revert(unitType string) error {
@@ -185,10 +160,6 @@ func (s *M2TWUnitService) GetUnitChangeType(unitType string) string {
 
 func (s *M2TWUnitService) HasUnsavedChanges() bool {
 	return s.repo.HasUnsavedChanges()
-}
-
-func (s *M2TWUnitService) Save() error {
-	return s.repo.Save()
 }
 
 func (s *M2TWUnitService) Validate(unit domain.M2TWUnit, originalType string) []string {
