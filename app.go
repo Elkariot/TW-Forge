@@ -330,6 +330,24 @@ func (a *App) HasUnsavedChanges() bool {
 	return a.unitService.HasUnsavedChanges() || a.projectileService.HasUnsavedChanges()
 }
 
+// RestoreOriginalFiles discards every change ever made to the currently loaded
+// game/mod — saved or not — by copying the backed-up files back over the game files,
+// then reloading everything from those restored files so in-memory state matches
+// exactly. Icon/texture files are not covered (see GameWriter.RestoreFromBackup).
+func (a *App) RestoreOriginalFiles() error {
+	if a.gameWriter == nil {
+		return fmt.Errorf("no game loaded")
+	}
+	logger.OpStart("restore_original_files", a.gamePath)
+	if err := a.gameWriter.RestoreFromBackup(); err != nil {
+		logger.OpDone("restore_original_files", err)
+		return err
+	}
+	err := a.InitGame(a.gamePath, a.gameVersion)
+	logger.OpDone("restore_original_files", err)
+	return err
+}
+
 func (a *App) Save() error {
 	logger.OpStart("save", "apply to game")
 	if err := a.gameWriter.Apply(); err != nil {

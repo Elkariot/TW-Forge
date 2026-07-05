@@ -115,6 +115,37 @@ func (w *GameWriter) Apply() error {
 	return nil
 }
 
+// RestoreFromBackup copies every backed-up text file (managedFiles, the M2TW modeldb,
+// RTW's descr_model_battle.txt) back over the current game files, undoing all changes
+// ever Applied — then clears the draft directory so no stale draft can later be
+// silently re-applied by a future Save(). It does not touch icon/texture files under
+// UI/ui: those are never backed up before being overwritten (see copyUnitIcon /
+// SaveIconFile / SaveM2TWIconFile), so there is nothing to restore them from.
+func (w *GameWriter) RestoreFromBackup() error {
+	if _, err := os.Stat(w.backupPath); err != nil {
+		return nil // Save() was never called — nothing to restore
+	}
+	for _, name := range managedFiles {
+		src := filepath.Join(w.backupPath, name)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := copyFile(src, filepath.Join(w.gamePath, name)); err != nil {
+			return fmt.Errorf("restore %s: %w", name, err)
+		}
+	}
+	for _, name := range []string{w.modelDBRelPath(), "descr_model_battle.txt"} {
+		src := filepath.Join(w.backupPath, name)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := copyFile(src, filepath.Join(w.gamePath, name)); err != nil {
+			return fmt.Errorf("restore %s: %w", name, err)
+		}
+	}
+	return os.RemoveAll(w.draftPath)
+}
+
 
 func (w *GameWriter) ensureInit() error {
 	w.initOnce.Do(func() {
