@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes, GetUnitChangeType, RevertUnit, DeleteUnit, HardDeleteUnit, IsCopyUnit, GetBuildings, UpdateBuildingLevel, GetFactions } from '../../wailsjs/go/main/App'
+import { GetUnitByType, UpdateUnit, GetUnitIcon, GetUnitBuildings, GetProjectileTypes, GetUnitChangeType, RevertUnit, DeleteUnit, HardDeleteUnit, IsCopyUnit, GetBuildings, UpdateBuildingLevel, GetFactions, HasRexEngine } from '../../wailsjs/go/main/App'
 import UnitAssets from './UnitAssets.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -8,7 +8,7 @@ const { t } = useI18n()
 import {
   UNIT_CATEGORIES, UNIT_CLASSES, VOICE_TYPES,
   WEAPON_TYPES, TECH_TYPES, DAMAGE_TYPES, SOUND_TYPES, ARMOUR_SOUNDS,
-  DISCIPLINE_VALUES, TRAINING_VALUES, UNIT_ATTRIBUTES, WEAPON_ATTRIBUTES,
+  DISCIPLINE_VALUES, TRAINING_VALUES, UNIT_ATTRIBUTES, REX_UNIT_ATTRIBUTES, WEAPON_ATTRIBUTES,
   FORMATION_PRIMARY, FORMATION_SECONDARY,
 } from '../enums.js'
 
@@ -25,6 +25,7 @@ const iconData = ref('')
 const unitBuildings = ref([])
 const unitChangeType = ref('none')
 const projectileTypes = ref(['no'])
+const hasRex = ref(false)
 
 // Пикер зданий для найма
 const bldPicker = ref(false)
@@ -36,9 +37,10 @@ const bldPickerLoading = ref(false)
 const allFactions = ref([])
 
 onMounted(async () => {
-  const [pt, factions] = await Promise.all([GetProjectileTypes(), GetFactions()])
+  const [pt, factions, rex] = await Promise.all([GetProjectileTypes(), GetFactions(), HasRexEngine()])
   projectileTypes.value = pt
   allFactions.value = factions
+  hasRex.value = rex
 })
 
 watch(() => props.unitType, async (type) => {
@@ -408,6 +410,18 @@ function removeFaction(name) {
                   {{ attr.label }}
                 </label>
               </div>
+              <template v-if="hasRex">
+                <div class="attr-divider">{{ $t('unit.rex_attributes_divider') }}</div>
+                <div class="attr-list-rex">
+                  <label v-for="attr in REX_UNIT_ATTRIBUTES" :key="attr.key" class="attr-check-rex">
+                    <input type="checkbox" :value="attr.key" v-model="edited.Attributes" @change="markDirty" />
+                    <span class="attr-check-text">
+                      <span class="attr-check-name">{{ attr.label }}</span>
+                      <span v-if="attr.hint" class="attr-check-hint">{{ attr.hint }}</span>
+                    </span>
+                  </label>
+                </div>
+              </template>
             </div>
           </div>
         </section>
@@ -1002,6 +1016,37 @@ function removeFaction(name) {
   accent-color: var(--color-accent);
   cursor: pointer;
 }
+.attr-divider {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-accent);
+}
+.attr-list-rex {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 7px 14px;
+}
+.attr-check-rex {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+}
+.attr-check-rex input[type="checkbox"] {
+  flex-shrink: 0;
+  width: auto;
+  margin: 2px 0 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.attr-check-text { display: flex; flex-direction: column; gap: 1px; }
+.attr-check-name { font-size: 11px; color: var(--color-text-dim); }
+.attr-check-hint { font-size: 10px; color: var(--color-text-muted); font-style: italic; }
 .attr-key { color: var(--color-text-muted); font-size: 10px; }
 .spear-bonus-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: help; }
 .spear-bonus-input { width: 52px !important; padding: 2px 4px !important; text-align: center; }

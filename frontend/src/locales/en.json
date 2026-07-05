@@ -94,6 +94,7 @@
     "field_formation_type": "Formation Type",
     "field_formation_secondary": "Secondary Formation",
     "field_attributes": "Attributes",
+    "rex_attributes_divider": "REX / M2EX Attributes",
     "field_weapon_attributes": "Weapon Attributes",
     "field_model": "Model",
     "field_count": "Count",

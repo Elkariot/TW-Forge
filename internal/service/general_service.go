@@ -170,6 +170,27 @@ func (s *GeneralService) findModDataPath(root string) (string, bool) {
 	return "", false
 }
 
+// rexMarkerFile returns the REX/M2EX launcher filename for game. REX (RTW) and M2EX
+// (M2TW) — https://github.com/Pannoniae/rex — ship as a standalone .exe sitting next
+// to the vanilla game executable rather than patching game data files, so their
+// presence is detected by checking for that file in the game's install root.
+func rexMarkerFile(game config.GameVersion) string {
+	if game == config.Medieval {
+		return "M2EX.exe"
+	}
+	return "REX.exe"
+}
+
+// HasRexEngine reports whether the REX/M2EX engine patch is present for the currently
+// loaded game. Its presence unlocks EDU/EDB attributes the vanilla engine ignores.
+func (s *GeneralService) HasRexEngine() bool {
+	if s.gameRoot == "" {
+		return false
+	}
+	ok, _ := s.checkPath(filepath.Join(s.gameRoot, rexMarkerFile(s.game)))
+	return ok
+}
+
 func (s *GeneralService) checkPath(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err != nil {

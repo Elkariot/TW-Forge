@@ -4,12 +4,12 @@ import {
   GetM2TWUnitByType, UpdateM2TWUnit, GetM2TWUnitChangeType,
   DeleteM2TWUnit, HardDeleteM2TWUnit, IsCopyUnit, RevertM2TWUnit,
   GetM2TWUnitBuildings, GetM2TWBuildings, UpdateM2TWBuildingLevel,
-  GetM2TWFactions, GetM2TWProjectileTypes,
+  GetM2TWFactions, GetM2TWProjectileTypes, HasRexEngine,
 } from '../../wailsjs/go/main/App'
 import {
   UNIT_CATEGORIES, UNIT_CLASSES, VOICE_TYPES,
   WEAPON_TYPES, TECH_TYPES, DAMAGE_TYPES, SOUND_TYPES, ARMOUR_SOUNDS,
-  DISCIPLINE_VALUES, TRAINING_VALUES, UNIT_ATTRIBUTES, WEAPON_ATTRIBUTES,
+  DISCIPLINE_VALUES, TRAINING_VALUES, UNIT_ATTRIBUTES, REX_UNIT_ATTRIBUTES, WEAPON_ATTRIBUTES,
   FORMATION_PRIMARY, FORMATION_SECONDARY,
 } from '../enums.js'
 import { useI18n } from 'vue-i18n'
@@ -29,6 +29,7 @@ const unitBuildings = ref([])
 const unitChangeType = ref('none')
 const projectileTypes = ref(['no'])
 const allFactions = ref([])
+const hasRex = ref(false)
 
 // Building picker
 const bldPicker = ref(false)
@@ -37,9 +38,10 @@ const allBuildings = ref([])
 const bldPickerLoading = ref(false)
 
 onMounted(async () => {
-  const [pt, factions] = await Promise.all([GetM2TWProjectileTypes(), GetM2TWFactions()])
+  const [pt, factions, rex] = await Promise.all([GetM2TWProjectileTypes(), GetM2TWFactions(), HasRexEngine()])
   projectileTypes.value = ['no', ...(pt ?? [])]
   allFactions.value = factions ?? []
+  hasRex.value = rex
 })
 
 watch(() => props.unitType, async (type) => {
@@ -414,6 +416,18 @@ async function removeFromBuilding(loc) {
                   {{ attr.label }}
                 </label>
               </div>
+              <template v-if="hasRex">
+                <div class="attr-divider">{{ $t('unit.rex_attributes_divider') }}</div>
+                <div class="attr-list-rex">
+                  <label v-for="attr in REX_UNIT_ATTRIBUTES" :key="attr.key" class="attr-check-rex">
+                    <input type="checkbox" :value="attr.key" v-model="edited.Attributes" @change="markDirty" />
+                    <span class="attr-check-text">
+                      <span class="attr-check-name">{{ attr.label }}</span>
+                      <span v-if="attr.hint" class="attr-check-hint">{{ attr.hint }}</span>
+                    </span>
+                  </label>
+                </div>
+              </template>
             </div>
           </div>
         </section>
@@ -764,6 +778,21 @@ label select option { background: var(--color-cell); }
 .attr-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .attr-check { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--color-text-dim); cursor: pointer; }
 .attr-check input[type=checkbox] { cursor: pointer; }
+.attr-divider {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-accent);
+}
+.attr-list-rex { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px 14px; }
+.attr-check-rex { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+.attr-check-rex input[type=checkbox] { flex-shrink: 0; margin-top: 1px; cursor: pointer; }
+.attr-check-text { display: flex; flex-direction: column; gap: 1px; }
+.attr-check-name { font-size: 11px; color: var(--color-text-dim); }
+.attr-check-hint { font-size: 9px; color: var(--color-text-muted); font-style: italic; }
 .attr-key { font-size: 9px; color: var(--color-text-muted); }
 .spear-bonus-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
 .spear-bonus-input { width: 48px; background: var(--color-cell); border: 1px solid var(--color-border); border-radius: 3px; color: var(--color-text-dim); font-size: 11px; padding: 2px 5px; text-align: right; }

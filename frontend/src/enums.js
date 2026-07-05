@@ -35,6 +35,30 @@ export const UNIT_ATTRIBUTES = [
   { key: 'can_run_amok',         label: 'Впадает в панику' },
 ]
 
+// Атрибуты, которые понимает только движок REX/M2EX (https://github.com/Pannoniae/rex),
+// а не ванильный RTW/M2TW — показывать только если App.HasRexEngine() вернул true.
+export const REX_UNIT_ATTRIBUTES = [
+  { key: 'expendable',              label: 'Расходный',             hint: 'не паникует соседей при бегстве' },
+  { key: 'elitist',                 label: 'Элитист',                hint: 'игнорирует шок от бегства не-элиты' },
+  { key: 'steadfast',               label: 'Стойкий',                hint: 'меньше теряет мораль от бегущих рядом' },
+  { key: 'intimidate',              label: 'Устрашение',             hint: 'аура страха на врагов рядом' },
+  { key: 'relentless',              label: 'Неутомимый',             hint: 'медленнее устаёт' },
+  { key: 'disciplined_missile',     label: 'Дисциплин. стрелки',     hint: 'медленнее устают' },
+  { key: 'inexhaustible',           label: 'Неисчерпаемый',          hint: 'никогда не устаёт' },
+  { key: 'disciplined_charge',      label: 'Дисциплин. натиск',      hint: 'бонус атаки медленнее спадает' },
+  { key: 'aggressive_push',         label: 'Агрессивный натиск',     hint: 'больший бонус атаки в разгоне' },
+  { key: 'brace_for_charge',        label: 'Изготовка к удару',      hint: 'вдвое гасит встречный разгон' },
+  { key: 'desert_raider',           label: 'Пустынный рейдер',       hint: 'бонус боя на песке' },
+  { key: 'forest_ambusher',         label: 'Лесной засадчик',        hint: 'бонус боя в густом лесу' },
+  { key: 'police',                  label: 'Полиция',                hint: 'гарнизон улучшает порядок' },
+  { key: 'troublemaker',            label: 'Смутьян',                hint: 'гарнизон ухудшает порядок и доход' },
+  { key: 'infinite_ammo',           label: 'Неисчерпаемый боезапас' },
+  { key: 'no_scale',                label: 'Не масштабируется',      hint: 'размером юнитов' },
+  { key: 'single_entity',           label: 'Одиночная сущность',     hint: 'генерал без свиты' },
+  { key: 'client_kingdom_only_units', label: 'Только для протекторатов' },
+  { key: 'capturable_eagle',        label: 'Штандарт можно захватить' },
+]
+
 // Атрибуты оружия (stat_pri_attr / stat_sec_attr), "no" означает отсутствие атрибутов
 // spear_bonus_N хранится отдельно (числовое поле)
 export const WEAPON_ATTRIBUTES = [
