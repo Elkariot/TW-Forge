@@ -14,6 +14,7 @@ import RecruitEditor from './components/RecruitEditor.vue'
 import BuildingEditor from './components/BuildingEditor.vue'
 import M2TWBuildingEditor from './components/M2TWBuildingEditor.vue'
 import M2TWRecruitEditor from './components/M2TWRecruitEditor.vue'
+import ProjectileEditor from './components/ProjectileEditor.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -247,6 +248,11 @@ async function applyToGame() {
           <path d="M12 1L3 5v6c0 5.5 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
         </svg>
       </button>
+      <button class="nav-btn" :class="{ active: activeTab === 'projectiles' }" :title="$t('app.nav_projectiles')" @click="activeTab = 'projectiles'">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+          <path d="M13.13 22.19 11.5 18.36c1.55-.7 3.02-1.61 4.33-2.73l-2.7 6.56zM5.64 12.5 1.81 10.87l6.56-2.7C7.25 9.48 6.34 10.95 5.64 12.5zM21.61 2.39S16.66.269 11.5 5.43c-2.19 2.19-3.44 4.5-4.5 6.55l3.42 3.42c2.05-1.06 4.36-2.31 6.55-4.5C22.13 5.34 21.61 2.39 21.61 2.39zM14.5 9.5c-.55-.55-.55-1.45 0-2s1.45-.55 2 0 .55 1.45 0 2-1.45.55-2 0zM8.88 16.53l-1.41-1.41-1.06 1.06c-.78.78-1.42 3.13-1.77 4.42 1.29-.35 3.64-.99 4.42-1.77l1.06-1.06z"/>
+        </svg>
+      </button>
     </nav>
 
     <!-- Вкладка: Юниты -->
@@ -381,6 +387,9 @@ async function applyToGame() {
     <!-- Вкладка: Найм -->
     <M2TWRecruitEditor v-else-if="activeTab === 'recruit' && isM2TW" class="tab-fill" @changed="onUnitSaved" />
     <RecruitEditor v-else-if="activeTab === 'recruit'" class="tab-fill" @changed="onUnitSaved" />
+
+    <!-- Вкладка: Снаряды (общая для RTW и M2TW) -->
+    <ProjectileEditor v-else-if="activeTab === 'projectiles'" class="tab-fill" @changed="onUnitSaved" />
 
     </div> <!-- below-topbar -->
   </div>

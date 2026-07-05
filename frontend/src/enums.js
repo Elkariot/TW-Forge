@@ -53,3 +53,17 @@ export const WEAPON_ATTRIBUTES = [
 // Строй: primary (всегда), secondary (опционально)
 export const FORMATION_PRIMARY   = ['square', 'horde']
 export const FORMATION_SECONDARY = ['', 'phalanx', 'testudo', 'wedge']
+
+// Флаги-переключатели descr_projectile.txt (бинарные ключевые слова без значения).
+// Должно соответствовать domain.ManagedProjectileFlags в Go.
+export const PROJECTILE_FLAGS = [
+  { key: 'fiery',            label: 'Зажигательный' },
+  { key: 'affected_by_rain', label: 'Точность падает от дождя' },
+  { key: 'ground_shatter',   label: 'Разрушается о землю' },
+  { key: 'body_piercing',    label: 'Пробивает насквозь' },
+  { key: 'grapeshot',        label: 'Картечь' },
+  { key: 'prefer_high',      label: 'ИИ предпочитает навесную траекторию' },
+  { key: 'no_ae_on_ram',     label: 'Не действует на таран' },
+  { key: 'effect_only',      label: 'Только визуальный эффект (без объекта)' },
+  { key: 'cow_carcass',      label: 'Коровья туша' },
+]

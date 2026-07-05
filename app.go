@@ -125,6 +125,9 @@ type App struct {
 	m2twUnitService     *service.M2TWUnitService
 	m2twBuildingService *service.M2TWBuildingService
 	m2twRepo            repository.M2TWGameRepository
+	// Shared between RTW and M2TW: descr_projectile.txt format is identical.
+	projectileService *service.ProjectileService
+	projectileRepo    repository.ProjectileRepository
 	// Shared writer (non-nil after InitGame)
 	gameWriter *writer.GameWriter
 }
@@ -212,6 +215,15 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 
 	p := parser.New(gameVersion, gamePath)
 	a.gameWriter = writer.New(gamePath)
+
+	projectileFile, err := parser.ParseProjectileFile(gamePath)
+	if err != nil {
+		return fmt.Errorf("parse projectiles error: %w", err)
+	}
+	projRepo := repository.NewProjectile(*projectileFile)
+	a.projectileRepo = projRepo
+	a.projectileService = service.NewProjectileService(projRepo)
+	logger.Info("projectiles loaded", "count", len(projectileFile.Projectiles))
 
 	if gameVersion == config.Medieval {
 		gameData, err := p.ParseM2TW()
@@ -309,7 +321,7 @@ func (a *App) UpdateUnit(originalType string, unit domain.Unit) error {
 }
 
 func (a *App) HasUnsavedChanges() bool {
-	return a.unitService.HasUnsavedChanges()
+	return a.unitService.HasUnsavedChanges() || a.projectileService.HasUnsavedChanges()
 }
 
 func (a *App) Save() error {
@@ -319,6 +331,7 @@ func (a *App) Save() error {
 		return err
 	}
 	a.rtwRepo.CommitSave()
+	a.projectileRepo.CommitSave()
 	logger.OpDone("save", nil)
 	return nil
 }
@@ -338,6 +351,65 @@ func (a *App) GetProjectileTypes() []string {
 
 func (a *App) GetUnitBuildings(unitType string) []domain.RecruitLocation {
 	return a.buildingService.GetUnitBuilding(unitType)
+}
+
+// ── Projectiles (shared between RTW and M2TW) ────────────────────────────────
+
+func (a *App) GetProjectiles() []domain.Projectile {
+	return a.projectileService.GetAll()
+}
+
+func (a *App) GetProjectileDelays() []domain.ProjectileDelay {
+	return a.projectileService.GetDelays()
+}
+
+func (a *App) GetProjectileByName(name string) (*domain.Projectile, error) {
+	return a.projectileService.GetByName(name)
+}
+
+func (a *App) GetProjectileChangeType(name string) string {
+	return a.projectileService.GetChangeType(name)
+}
+
+func (a *App) UpdateProjectile(originalName string, p domain.Projectile) error {
+	logger.OpStart("update_projectile", p.Name)
+	if err := a.projectileService.Update(originalName, p); err != nil {
+		logger.OpDone("update_projectile", err)
+		return err
+	}
+	err := a.gameWriter.SaveProjectilesDraft(a.projectileRepo.GetData(), a.projectileRepo.GetChanges())
+	logger.OpDone("update_projectile", err)
+	return err
+}
+
+func (a *App) CreateProjectile(templateName, newName string) error {
+	logger.OpStart("create_projectile", fmt.Sprintf("%s from %s", newName, templateName))
+	if err := a.projectileService.Create(templateName, newName); err != nil {
+		logger.OpDone("create_projectile", err)
+		return err
+	}
+	err := a.gameWriter.SaveProjectilesDraft(a.projectileRepo.GetData(), a.projectileRepo.GetChanges())
+	logger.OpDone("create_projectile", err)
+	return err
+}
+
+func (a *App) DeleteProjectile(name string) error {
+	logger.OpStart("delete_projectile", name)
+	if err := a.projectileService.Delete(name); err != nil {
+		logger.OpDone("delete_projectile", err)
+		return err
+	}
+	err := a.gameWriter.SaveProjectilesDraft(a.projectileRepo.GetData(), a.projectileRepo.GetChanges())
+	logger.OpDone("delete_projectile", err)
+	return err
+}
+
+func (a *App) RevertProjectile(name string) error {
+	return a.projectileService.Revert(name)
+}
+
+func (a *App) RevertAllProjectiles() {
+	a.projectileService.RevertAll()
 }
 
 func (a *App) CopyUnit(unitType, faction string) (string, error) {
@@ -790,7 +862,8 @@ func (a *App) ValidateM2TWUnit(originalType string, unit domain.M2TWUnit) []stri
 }
 
 func (a *App) M2TWHasUnsavedChanges() bool {
-	return a.m2twUnitService != nil && a.m2twUnitService.HasUnsavedChanges()
+	return (a.m2twUnitService != nil && a.m2twUnitService.HasUnsavedChanges()) ||
+		(a.projectileService != nil && a.projectileService.HasUnsavedChanges())
 }
 
 func (a *App) SaveM2TW() error {
@@ -803,6 +876,7 @@ func (a *App) SaveM2TW() error {
 		return err
 	}
 	a.m2twRepo.CommitSave()
+	a.projectileRepo.CommitSave()
 	logger.OpDone("save_m2tw", nil)
 	return nil
 }
