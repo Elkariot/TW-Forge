@@ -256,6 +256,12 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 	return nil
 }
 
+// HasRexEngine reports whether the REX/M2EX engine patch is present for the currently
+// loaded game. Its presence unlocks EDU/EDB attributes the vanilla engine ignores.
+func (a *App) HasRexEngine() bool {
+	return a.generalService.HasRexEngine()
+}
+
 func (a *App) GetFactions() []domain.Faction {
 	return a.factionService.GetFactions()
 }

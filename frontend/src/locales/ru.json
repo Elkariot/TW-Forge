@@ -94,6 +94,7 @@
     "field_formation_type": "Тип строя",
     "field_formation_secondary": "Доп. строй",
     "field_attributes": "Атрибуты",
+    "rex_attributes_divider": "REX / M2EX атрибуты",
     "field_weapon_attributes": "Атрибуты оружия",
     "field_model": "Модель",
     "field_count": "Кол-во",
