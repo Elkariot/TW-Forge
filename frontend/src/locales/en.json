@@ -58,7 +58,11 @@
     "nav_units": "Units",
     "nav_buildings": "Buildings",
     "nav_recruit": "Recruit",
-    "nav_projectiles": "Projectiles"
+    "nav_projectiles": "Projectiles",
+    "restore_original": "Restore Originals",
+    "restoring": "Restoring...",
+    "restore_original_title": "Discard ALL changes (saved and unsaved) and restore game files from backup",
+    "restore_confirm": "All changes — saved and unsaved — will be discarded, and game files will be restored to how they were before editing began. Unit icons/textures are not affected. Continue?"
   },
   "unit": {
     "select_unit": "Select a unit",

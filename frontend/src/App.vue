@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import {
   GetFactions, GetUnitsByFaction, GetDeletedUnits, Save, HasUnsavedChanges, CopyUnit,
   GetM2TWFactions, GetM2TWUnitsByFaction, GetM2TWDeletedUnits, SaveM2TW, M2TWHasUnsavedChanges,
-  CopyM2TWUnit,
+  CopyM2TWUnit, RestoreOriginalFiles,
 } from '../wailsjs/go/main/App'
 import UnitDetail from './components/UnitDetail.vue'
 import UnitCreateModal from './components/UnitCreateModal.vue'
@@ -197,6 +197,29 @@ async function applyToGame() {
     applying.value = false
   }
 }
+
+const restoring = ref(false)
+
+async function restoreOriginal() {
+  if (!confirm(t('app.restore_confirm'))) return
+  restoring.value = true
+  applyError.value = null
+  try {
+    await RestoreOriginalFiles()
+    factions.value = isM2TW.value ? await GetM2TWFactions() : await GetFactions()
+    selectedFaction.value = null
+    unitGroups.value = {}
+    selectedUnitType.value = null
+    deletedUnits.value = []
+    showDeleted.value = false
+    hasChanges.value = false
+    isApplied.value = false
+  } catch (e) {
+    applyError.value = String(e)
+  } finally {
+    restoring.value = false
+  }
+}
 </script>
 
 <template>
@@ -218,6 +241,14 @@ async function applyToGame() {
         <ThemePicker />
         <button class="lang-switch" @click="toggleLang">{{ locale === 'ru' ? 'EN' : 'RU' }}</button>
         <span v-if="applyError" class="topbar-error">{{ applyError }}</span>
+        <button
+          class="btn-restore"
+          :disabled="restoring || applying"
+          :title="$t('app.restore_original_title')"
+          @click="restoreOriginal"
+        >
+          {{ restoring ? $t('app.restoring') : $t('app.restore_original') }}
+        </button>
         <button
           class="btn-apply"
           :class="{ 'btn-apply--done': isApplied && hasChanges }"
@@ -472,6 +503,17 @@ body { font-family: sans-serif; background: var(--color-bg); color: var(--color-
 .btn-apply:disabled { opacity: 0.5; cursor: default; }
 .btn-apply--done { background: #4a9e6b; border-color: #3d8a5c; }
 .btn-apply--done:hover { background: #3d8a5c; }
+.btn-restore {
+  background: transparent;
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.btn-restore:hover { background: var(--color-error); color: var(--color-text); }
+.btn-restore:disabled { opacity: 0.5; cursor: default; }
 
 .below-topbar { display: flex; flex: 1; overflow: hidden; }
 
