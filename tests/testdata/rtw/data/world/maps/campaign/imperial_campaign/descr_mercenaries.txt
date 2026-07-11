@@ -1,0 +1,15 @@
+;
+; mercenary pools - trimmed test fixture
+;
+
+pool Gaul_Pool
+	regions Armorica
+	unit merc gallic mercenaries,			exp 0 cost 400 replenish 0.06 - 0.44 max 4 initial 1
+
+pool Greek_Pool
+	regions Illyria
+	unit merc greek mercenaries,			exp 1 cost 450 replenish 0.1 - 0.15 max 2 initial 1 armour 1 weapon_lvl 1
+
+pool Sicily_Pool
+	regions Sardinia
+	unit merc free company,			exp 0 cost 500 replenish 0.03 - 0.05 max 1 initial 0

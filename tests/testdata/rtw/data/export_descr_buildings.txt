@@ -1,0 +1,37 @@
+building barracks
+{
+    levels muster_field militia_barracks
+    {
+        muster_field requires factions { barbarian, carthaginian, greek, }
+        {
+            capability
+            {
+                recruit "carthaginian peltast"  0  requires factions { carthage, }
+                recruit "barb infantry gaul"  0  requires factions { gauls, }
+                recruit "greek hoplite"  0  requires factions { greek_cities, }
+            }
+            construction  2
+            cost  600
+            settlement_min town
+            upgrades
+            {
+                militia_barracks
+            }
+        }
+        militia_barracks requires factions { barbarian, carthaginian, greek, }
+        {
+            capability
+            {
+                recruit "carthaginian peltast"  0  requires factions { carthage, }
+                recruit "barb infantry gaul"  0  requires factions { gauls, }
+                recruit "greek hoplite"  0  requires factions { greek_cities, }
+            }
+            construction  3
+            cost  1200
+            settlement_min large_town
+            upgrades
+            {
+            }
+        }
+    }
+}

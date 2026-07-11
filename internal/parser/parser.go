@@ -346,6 +346,9 @@ func (p *Parser) parseBuildings() ([]domain.BuildingGroup, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // no EDB in this mod/game — buildings editor just shows empty
+		}
 		return nil, err
 	}
 	defer file.Close()

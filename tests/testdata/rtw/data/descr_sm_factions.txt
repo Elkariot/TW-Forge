@@ -1,0 +1,17 @@
+faction						carthage
+culture						carthaginian
+primary_colour				red 255, green 255, blue 255
+secondary_colour			red 85, green 100, blue 200
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+faction						gauls
+culture						barbarian
+primary_colour				red 77, green 95, blue 45
+secondary_colour			red 165, green 20, blue 20
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+faction						greek_cities
+culture						greek
+primary_colour				red 197, green 194, blue 129
+secondary_colour			red 165, green 20, blue 20
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

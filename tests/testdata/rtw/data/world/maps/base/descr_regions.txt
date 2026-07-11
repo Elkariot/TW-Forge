@@ -1,0 +1,30 @@
+;
+; regions list - trimmed test fixture
+;
+
+Sardinia
+	Caralis
+	carthage
+	Beronicensis
+	232 41 198
+	slaves, lead, dogs, pigs
+	5
+	5
+
+Armorica
+	Condate_Redonum
+	gauls
+	Veneti
+	232 41 135
+	timber, slaves, glass, dogs, pigs
+	5
+	7
+
+Illyria
+	Segestica
+	greek_cities
+	Illyrians
+	58 173 177
+	gold, silver, iron, wine, slaves, dogs, pigs
+	5
+	3
