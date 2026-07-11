@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import {
   GetFactions, GetUnitsByFaction, GetDeletedUnits, Save, HasUnsavedChanges, CopyUnit,
   GetM2TWFactions, GetM2TWUnitsByFaction, GetM2TWDeletedUnits, SaveM2TW, M2TWHasUnsavedChanges,
-  CopyM2TWUnit, RestoreOriginalFiles,
+  CopyM2TWUnit, RestoreOriginalFiles, GetTemplateState,
 } from '../wailsjs/go/main/App'
 import UnitDetail from './components/UnitDetail.vue'
 import UnitCreateModal from './components/UnitCreateModal.vue'
@@ -17,6 +17,8 @@ import M2TWRecruitEditor from './components/M2TWRecruitEditor.vue'
 import ProjectileEditor from './components/ProjectileEditor.vue'
 import MercenaryEditor from './components/MercenaryEditor.vue'
 import ThemePicker from './components/ThemePicker.vue'
+import TemplateBar from './components/TemplateBar.vue'
+import TemplateApplyPrompt from './components/TemplateApplyPrompt.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t, locale } = useI18n()
@@ -81,6 +83,12 @@ const applyError = ref(null)
 const showDeleted = ref(false)
 const deletedUnits = ref([])
 const showCreateModal = ref(false)
+const showApplyPrompt = ref(false)
+const templateBarRef = ref(null)
+// Bumped on a full on-disk reset (restore original / switch template) so the
+// self-loading tabs (buildings/recruit/projectiles/mercenaries) remount and reread
+// from the now-changed game files instead of keeping their stale in-memory state.
+const reloadKey = ref(0)
 
 
 async function selectFaction(faction) {
@@ -185,6 +193,32 @@ async function confirmCopy() {
   }
 }
 
+// Промпт "сохранить как шаблон" нужен только когда сейчас нет активного шаблона —
+// если мы уже внутри одного, следующие применения просто дополняют его (см.
+// syncCurrentTemplate на Go-стороне), без повторного вопроса каждый раз.
+async function requestApply() {
+  let current = ''
+  try {
+    current = (await GetTemplateState()).Current
+  } catch (e) { /* нет загруженной игры — applyToGame ниже и так сообщит об ошибке */ }
+  if (current) {
+    await applyToGame()
+    await templateBarRef.value?.refresh()
+  } else {
+    showApplyPrompt.value = true
+  }
+}
+
+async function onApplyConfirmed() {
+  showApplyPrompt.value = false
+  await applyToGame()
+  await templateBarRef.value?.refresh()
+}
+
+function onApplyCancelled() {
+  showApplyPrompt.value = false
+}
+
 async function applyToGame() {
   applying.value = true
   applyError.value = null
@@ -201,25 +235,38 @@ async function applyToGame() {
 
 const restoring = ref(false)
 
+// Общий сброс UI-состояния после того, как игровые файлы на диске были целиком
+// заменены в обход обычного flow редактирования — используется и "Восстановить
+// оригинал", и переключением шаблона (см. onTemplateSwitched).
+async function resetSelectionState() {
+  factions.value = isM2TW.value ? await GetM2TWFactions() : await GetFactions()
+  selectedFaction.value = null
+  unitGroups.value = {}
+  selectedUnitType.value = null
+  deletedUnits.value = []
+  showDeleted.value = false
+  hasChanges.value = false
+  isApplied.value = false
+  reloadKey.value++
+}
+
 async function restoreOriginal() {
   if (!confirm(t('app.restore_confirm'))) return
   restoring.value = true
   applyError.value = null
   try {
     await RestoreOriginalFiles()
-    factions.value = isM2TW.value ? await GetM2TWFactions() : await GetFactions()
-    selectedFaction.value = null
-    unitGroups.value = {}
-    selectedUnitType.value = null
-    deletedUnits.value = []
-    showDeleted.value = false
-    hasChanges.value = false
-    isApplied.value = false
+    await resetSelectionState()
   } catch (e) {
     applyError.value = String(e)
   } finally {
     restoring.value = false
   }
+}
+
+async function onTemplateSwitched() {
+  applyError.value = null
+  await resetSelectionState()
 }
 </script>
 
@@ -242,6 +289,7 @@ async function restoreOriginal() {
         <ThemePicker />
         <button class="lang-switch" @click="toggleLang">{{ locale === 'ru' ? 'EN' : 'RU' }}</button>
         <span v-if="applyError" class="topbar-error">{{ applyError }}</span>
+        <TemplateBar ref="templateBarRef" :has-unsaved-changes="hasChanges" @switched="onTemplateSwitched" />
         <button
           class="btn-restore"
           :disabled="restoring || applying"
@@ -254,7 +302,7 @@ async function restoreOriginal() {
           class="btn-apply"
           :class="{ 'btn-apply--done': isApplied && hasChanges }"
           :disabled="applying || !hasChanges"
-          @click="applyToGame"
+          @click="requestApply"
         >
           {{ applying ? $t('app.applying') : isApplied ? $t('app.applied') : $t('app.apply_to_game') }}
         </button>
@@ -418,18 +466,18 @@ async function restoreOriginal() {
     </template>
 
     <!-- Вкладка: Здания -->
-    <M2TWBuildingEditor v-else-if="activeTab === 'buildings' && isM2TW" class="tab-fill" @changed="onUnitSaved" />
-    <BuildingEditor v-else-if="activeTab === 'buildings'" class="tab-fill" @changed="onUnitSaved" />
+    <M2TWBuildingEditor v-else-if="activeTab === 'buildings' && isM2TW" :key="`buildings-${reloadKey}`" class="tab-fill" @changed="onUnitSaved" />
+    <BuildingEditor v-else-if="activeTab === 'buildings'" :key="`buildings-${reloadKey}`" class="tab-fill" @changed="onUnitSaved" />
 
     <!-- Вкладка: Найм -->
-    <M2TWRecruitEditor v-else-if="activeTab === 'recruit' && isM2TW" class="tab-fill" @changed="onUnitSaved" />
-    <RecruitEditor v-else-if="activeTab === 'recruit'" class="tab-fill" @changed="onUnitSaved" />
+    <M2TWRecruitEditor v-else-if="activeTab === 'recruit' && isM2TW" :key="`recruit-${reloadKey}`" class="tab-fill" @changed="onUnitSaved" />
+    <RecruitEditor v-else-if="activeTab === 'recruit'" :key="`recruit-${reloadKey}`" class="tab-fill" @changed="onUnitSaved" />
 
     <!-- Вкладка: Снаряды (общая для RTW и M2TW) -->
-    <ProjectileEditor v-else-if="activeTab === 'projectiles'" class="tab-fill" @changed="onUnitSaved" />
+    <ProjectileEditor v-else-if="activeTab === 'projectiles'" :key="`projectiles-${reloadKey}`" class="tab-fill" @changed="onUnitSaved" />
 
     <!-- Вкладка: Наёмники (общая для RTW и M2TW) -->
-    <MercenaryEditor v-else-if="activeTab === 'mercenaries'" class="tab-fill" :is-m2-t-w="isM2TW" @changed="onUnitSaved" />
+    <MercenaryEditor v-else-if="activeTab === 'mercenaries'" :key="`mercenaries-${reloadKey}`" class="tab-fill" :is-m2-t-w="isM2TW" @changed="onUnitSaved" />
 
     </div> <!-- below-topbar -->
   </div>
@@ -451,6 +499,9 @@ async function restoreOriginal() {
       </div>
     </div>
   </div>
+
+  <!-- Промпт "сохранить как шаблон" перед применением к игре -->
+  <TemplateApplyPrompt v-if="showApplyPrompt" @apply="onApplyConfirmed" @cancel="onApplyCancelled" />
 </template>
 
 

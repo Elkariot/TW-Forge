@@ -63,7 +63,26 @@
     "restore_original": "Restore Originals",
     "restoring": "Restoring...",
     "restore_original_title": "Discard ALL changes (saved and unsaved) and restore game files from backup",
-    "restore_confirm": "All changes — saved and unsaved — will be discarded, and game files will be restored to how they were before editing began. Unit icons/textures are not affected. Continue?"
+    "restore_confirm": "All changes — saved and unsaved — will be discarded, and game files will be restored to how they were before editing began. Unit icons/textures are not affected. Continue?",
+    "apply_template_prompt_title": "Save the current state as a template?",
+    "apply_template_prompt_text": "Before applying the new edits to the game, you can save the current state (not including these edits) under a name — you'll be able to come back to it later. While you're inside a template, this won't ask again — every further apply just gets folded into it; switch templates from the dropdown in the top bar.",
+    "apply_save_and_apply": "Save as template and apply",
+    "apply_without_saving": "Apply without saving"
+  },
+  "templates": {
+    "label": "Template",
+    "none": "none selected",
+    "none_option": "— No template —",
+    "dirty_hint": "There are unsaved edits not yet applied to the game",
+    "empty": "No templates yet",
+    "create": "New template",
+    "name_placeholder": "Template name",
+    "name_required": "Enter a template name",
+    "delete_confirm": "Delete template \"{name}\"?",
+    "switch_confirm_title": "You have unsaved changes",
+    "switch_confirm_text": "Your current unsaved edits (not yet applied to the game) will be lost when switching to \"{name}\". What should happen?",
+    "save_and_switch": "Save as new template and switch",
+    "discard_and_switch": "Discard changes and switch"
   },
   "unit": {
     "select_unit": "Select a unit",
