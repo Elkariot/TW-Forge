@@ -20,11 +20,12 @@ var managedFiles = []string{
 }
 
 type GameWriter struct {
-	gamePath   string
-	backupPath string
-	draftPath  string
-	initOnce   sync.Once
-	initErr    error
+	gamePath         string
+	baseGameDataPath string // fallback source root for files the mod itself doesn't ship
+	backupPath       string
+	draftPath        string
+	initOnce         sync.Once
+	initErr          error
 }
 
 func New(gamePath string) *GameWriter {
@@ -34,6 +35,13 @@ func New(gamePath string) *GameWriter {
 		backupPath: filepath.Join(editorRoot, "backup"),
 		draftPath:  filepath.Join(editorRoot, "draft"),
 	}
+}
+
+// SetBaseGameDataPath records the base game's data folder so file resolution can fall
+// back to it for files the mod doesn't ship itself (e.g. campaign maps most mods don't
+// override) — mirrors App.findAsset's mod-then-base convention.
+func (w *GameWriter) SetBaseGameDataPath(path string) {
+	w.baseGameDataPath = path
 }
 
 // modelDBRelPath returns the relative path to battle_models.modeldb within gamePath.
@@ -112,7 +120,7 @@ func (w *GameWriter) Apply() error {
 	if err := w.applyDirRecursive("ui"); err != nil {
 		return err
 	}
-	return nil
+	return w.applyMercenariesCampaigns()
 }
 
 // RestoreFromBackup copies every backed-up text file (managedFiles, the M2TW modeldb,
@@ -142,6 +150,9 @@ func (w *GameWriter) RestoreFromBackup() error {
 		if err := copyFile(src, filepath.Join(w.gamePath, name)); err != nil {
 			return fmt.Errorf("restore %s: %w", name, err)
 		}
+	}
+	if err := w.restoreMercenariesCampaigns(); err != nil {
+		return fmt.Errorf("restore mercenaries: %w", err)
 	}
 	return os.RemoveAll(w.draftPath)
 }

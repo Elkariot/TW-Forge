@@ -150,6 +150,26 @@ func serializeProjectileBlock(p domain.Projectile) string {
 		lines = removeLine(lines, "exploding")
 	}
 
+	effectFields := []struct {
+		key   string
+		value string
+	}{
+		{"effect", p.Effect},
+		{"end_effect", p.EndEffect},
+		{"end_man_effect", p.EndManEffect},
+		{"end_package_effect", p.EndPackageEffect},
+		{"end_shatter_effect", p.EndShatterEffect},
+		{"end_shatter_man_effect", p.EndShatterManEffect},
+		{"end_shatter_package_effect", p.EndShatterPackageEffect},
+	}
+	for _, ef := range effectFields {
+		if ef.value != "" {
+			lines, headerAnchor = upsertLine(lines, ef.key, formatLine(ef.key, ef.value), headerAnchor)
+		} else {
+			lines = removeLine(lines, ef.key)
+		}
+	}
+
 	lines = setLine(lines, "damage", formatLine("damage", strconv.Itoa(p.Damage)))
 	damageAnchor := indexOfKey(lines, "damage")
 	if damageAnchor == -1 {

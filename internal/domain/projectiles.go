@@ -28,6 +28,18 @@ type Projectile struct {
 	MaxAngle int
 	Velocity []float64 // one value = fixed speed, two values = randomized range
 
+	// Effect is the flight/trail effect name (the "model" of the projectile as it
+	// travels — the mesh, if any, is bundled inside this effect's own definition,
+	// not chosen separately). The six End* fields are impact-effect names for the
+	// different things a projectile can hit; empty string means the line is absent.
+	Effect                  string
+	EndEffect               string
+	EndManEffect            string
+	EndPackageEffect        string
+	EndShatterEffect        string
+	EndShatterManEffect     string
+	EndShatterPackageEffect string
+
 	Flags []string // bare boolean keywords present in the block: fiery, affected_by_rain, ground_shatter, body_piercing, grapeshot, prefer_high, no_ae_on_ram, effect_only, cow_carcass...
 
 	IsDeleted bool

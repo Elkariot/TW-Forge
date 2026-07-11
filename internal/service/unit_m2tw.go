@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"slices"
 	"tw-forge/internal/domain"
 	"tw-forge/internal/repository"
 	"strings"
@@ -112,6 +113,34 @@ func (s *M2TWUnitService) CreateUnit(templateType, newType, faction string) (src
 	}
 	if err = s.repo.AddUnit(unit); err != nil {
 		return "", "", fmt.Errorf("failed to create unit: %w", err)
+	}
+	return srcFaction, soldierModel, nil
+}
+
+// AddFactionToUnit grants an existing unit (e.g. a mercenary) to another faction without
+// cloning it — same type, dictionary and soldier model, just an extra Ownership/Eras entry.
+// Returns an existing owner faction and the soldier model so app.go can patch the shared
+// modeldb texture entry and copy the icon into the new faction's folder.
+func (s *M2TWUnitService) AddFactionToUnit(unitType, faction string) (srcFaction, soldierModel string, err error) {
+	unit, ok := s.repo.GetUnitByType(unitType)
+	if !ok {
+		return "", "", fmt.Errorf("unit not found: %s", unitType)
+	}
+	if slices.Contains(unit.Ownership, faction) {
+		return "", "", fmt.Errorf("unit %q already belongs to faction %q", unitType, faction)
+	}
+	if len(unit.Ownership) > 0 {
+		srcFaction = unit.Ownership[0]
+	}
+	soldierModel = unit.Soldier.Model
+	unit.Ownership = append(unit.Ownership, faction)
+	for era, eraFactions := range unit.Eras {
+		if !slices.Contains(eraFactions, faction) {
+			unit.Eras[era] = append(eraFactions, faction)
+		}
+	}
+	if err = s.repo.UpdateUnit(unitType, unit); err != nil {
+		return "", "", fmt.Errorf("error adding faction to unit: %w", err)
 	}
 	return srcFaction, soldierModel, nil
 }

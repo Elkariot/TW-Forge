@@ -405,6 +405,9 @@ func (p *Parser) parseM2TWBuildings() ([]domain.M2TWBuildingGroup, []string, err
 	path := filepath.Join(p.GamePath, "export_descr_buildings.txt")
 	file, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, nil // no EDB in this mod/game — buildings editor just shows empty
+		}
 		return nil, nil, err
 	}
 	defer file.Close()

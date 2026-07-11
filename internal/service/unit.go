@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"tw-forge/internal/domain"
 	"tw-forge/internal/repository"
@@ -101,6 +102,29 @@ func (s *UnitService) CopyUnit(unitType, faction string) (string, error) {
 	}
 
 	return newUnitType, nil
+}
+
+// AddFactionToUnit grants an existing unit (e.g. a mercenary) to another faction without
+// cloning it — same type, dictionary and soldier model, just an extra Ownership entry.
+// Returns an existing owner faction and the soldier model so app.go can patch the shared
+// battle-model texture entry and copy the icon into the new faction's folder.
+func (s *UnitService) AddFactionToUnit(unitType, faction string) (srcFaction, soldierModel string, err error) {
+	unit, ok := s.repo.GetUnitByType(unitType)
+	if !ok {
+		return "", "", fmt.Errorf("unit not found: %s", unitType)
+	}
+	if slices.Contains(unit.Ownership, faction) {
+		return "", "", fmt.Errorf("unit %q already belongs to faction %q", unitType, faction)
+	}
+	if len(unit.Ownership) > 0 {
+		srcFaction = unit.Ownership[0]
+	}
+	soldierModel = unit.Soldier.Model
+	unit.Ownership = append(unit.Ownership, faction)
+	if err = s.repo.UpdateUnit(unitType, unit); err != nil {
+		return "", "", fmt.Errorf("error adding faction to unit: %w", err)
+	}
+	return srcFaction, soldierModel, nil
 }
 
 // SoldierModel returns the soldier model of a unit — needed by app.go to pass to writer.

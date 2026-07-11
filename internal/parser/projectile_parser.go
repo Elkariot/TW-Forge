@@ -91,6 +91,34 @@ func buildProjectile(block []string) domain.Projectile {
 			if len(fields) >= 2 {
 				p.ExplodingOf = fields[1]
 			}
+		case "effect":
+			if len(fields) >= 2 {
+				p.Effect = fields[1]
+			}
+		case "end_effect":
+			if len(fields) >= 2 {
+				p.EndEffect = fields[1]
+			}
+		case "end_man_effect":
+			if len(fields) >= 2 {
+				p.EndManEffect = fields[1]
+			}
+		case "end_package_effect":
+			if len(fields) >= 2 {
+				p.EndPackageEffect = fields[1]
+			}
+		case "end_shatter_effect":
+			if len(fields) >= 2 {
+				p.EndShatterEffect = fields[1]
+			}
+		case "end_shatter_man_effect":
+			if len(fields) >= 2 {
+				p.EndShatterManEffect = fields[1]
+			}
+		case "end_shatter_package_effect":
+			if len(fields) >= 2 {
+				p.EndShatterPackageEffect = fields[1]
+			}
 		case "damage":
 			if len(fields) >= 2 {
 				p.Damage = parseInt(fields[1])

@@ -1,0 +1,39 @@
+building equestrian
+{
+    levels stables knights_stables
+    {
+        stables castle requires factions { northern_european, greek, eastern_european, }
+        {
+            capability
+            {
+                recruit_pool "Peasant Archers"  1   0.4   2  0  requires factions { england, }
+                recruit_pool "Skythikon"  1   0.4   2  0  requires factions { byzantium, }
+                recruit_pool "Dzukijan Horsemen"  1   0.3   2  0  requires factions { lithuania, }
+            }
+            material wooden
+            construction  2
+            cost  1200
+            settlement_min town
+            upgrades
+            {
+                knights_stables
+            }
+        }
+        knights_stables castle requires factions { northern_european, greek, eastern_european, }
+        {
+            capability
+            {
+                recruit_pool "Peasant Archers"  1   0.5   3  0  requires factions { england, }
+                recruit_pool "Skythikon"  1   0.45   3  0  requires factions { byzantium, }
+                recruit_pool "Dzukijan Horsemen"  1   0.4   3  0  requires factions { lithuania, }
+            }
+            material wooden
+            construction  3
+            cost  2000
+            settlement_min large_town
+            upgrades
+            {
+            }
+        }
+    }
+}

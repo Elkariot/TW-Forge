@@ -1,0 +1,52 @@
+;
+;	projectile descriptions text file - trimmed test fixture
+;
+
+delay		standard	0.0
+delay		flaming		15.0
+delay		gunpowder	0.0
+
+projectile zhuge_shot
+
+damage					0
+radius					0
+mass					0.05
+accuracy_vs_units		0.04
+min_angle				-60
+max_angle				65
+velocity				20 800 50
+display   				aimed
+end
+
+projectile catapult
+
+damage			30
+damage_to_troops 30
+radius			0.3
+mass			1.5
+area			2.0
+accuracy_vs_units		0.0625
+accuracy_vs_buildings	0.05
+accuracy_vs_towers      0.0325
+min_angle		-15
+max_angle		70
+velocity		75
+display			aimed
+end
+
+projectile fiery_catapult
+
+flaming			catapult
+damage			30
+damage_to_troops 30
+radius			0.3
+mass			0.8
+area			2.5
+accuracy_vs_units		0.0625
+accuracy_vs_buildings	0.05
+accuracy_vs_towers      0.035
+min_angle		-15
+max_angle		70
+velocity		65
+display			aimed
+end

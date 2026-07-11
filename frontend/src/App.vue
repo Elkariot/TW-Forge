@@ -15,6 +15,7 @@ import BuildingEditor from './components/BuildingEditor.vue'
 import M2TWBuildingEditor from './components/M2TWBuildingEditor.vue'
 import M2TWRecruitEditor from './components/M2TWRecruitEditor.vue'
 import ProjectileEditor from './components/ProjectileEditor.vue'
+import MercenaryEditor from './components/MercenaryEditor.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -284,6 +285,11 @@ async function restoreOriginal() {
           <path d="M13.13 22.19 11.5 18.36c1.55-.7 3.02-1.61 4.33-2.73l-2.7 6.56zM5.64 12.5 1.81 10.87l6.56-2.7C7.25 9.48 6.34 10.95 5.64 12.5zM21.61 2.39S16.66.269 11.5 5.43c-2.19 2.19-3.44 4.5-4.5 6.55l3.42 3.42c2.05-1.06 4.36-2.31 6.55-4.5C22.13 5.34 21.61 2.39 21.61 2.39zM14.5 9.5c-.55-.55-.55-1.45 0-2s1.45-.55 2 0 .55 1.45 0 2-1.45.55-2 0zM8.88 16.53l-1.41-1.41-1.06 1.06c-.78.78-1.42 3.13-1.77 4.42 1.29-.35 3.64-.99 4.42-1.77l1.06-1.06z"/>
         </svg>
       </button>
+      <button class="nav-btn" :class="{ active: activeTab === 'mercenaries' }" :title="$t('app.nav_mercenaries')" @click="activeTab = 'mercenaries'">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+          <path d="M12 2 4 6v5c0 5 3.4 8.9 8 10 4.6-1.1 8-5 8-10V6l-8-4zm0 4a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm0 12.2a6.5 6.5 0 0 1-5-2.4c.03-1.7 3.34-2.6 5-2.6s4.97.9 5 2.6a6.5 6.5 0 0 1-5 2.4z"/>
+        </svg>
+      </button>
     </nav>
 
     <!-- Вкладка: Юниты -->
@@ -421,6 +427,9 @@ async function restoreOriginal() {
 
     <!-- Вкладка: Снаряды (общая для RTW и M2TW) -->
     <ProjectileEditor v-else-if="activeTab === 'projectiles'" class="tab-fill" @changed="onUnitSaved" />
+
+    <!-- Вкладка: Наёмники (общая для RTW и M2TW) -->
+    <MercenaryEditor v-else-if="activeTab === 'mercenaries'" class="tab-fill" :is-m2-t-w="isM2TW" @changed="onUnitSaved" />
 
     </div> <!-- below-topbar -->
   </div>

@@ -1,0 +1,17 @@
+faction						england
+culture						northern_european
+religion					catholic
+primary_colour					red 215, green 0, blue 0
+secondary_colour				red 255, green 210, blue 0
+
+faction						byzantium
+culture						greek
+religion					orthodox
+primary_colour					red 133, green 18, blue 137
+secondary_colour				red 239, green 239, blue 239
+
+faction						lithuania
+culture						eastern_european
+religion					pagan
+primary_colour					red 12, green 30, blue 200
+secondary_colour				red 215, green 0, blue 0

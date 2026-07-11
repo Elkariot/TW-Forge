@@ -1,0 +1,47 @@
+type				carthaginian_peltast
+skeleton			fs_semi_fast_javelinman, fs_semi_fast_dagger
+indiv_range			40
+texture			carthage, data/models_unit/textures/unit_carthage_peltast.tga
+model_flexi		data/models_unit/unit_carthage_peltast_high.cas, 15
+model_sprite		carthage, 60.0, data/sprites/carthage_carthaginian_peltast_sprite.spr
+model_tri			400, 0.5f, 0.5f, 0.5f
+
+type				barb_infantry_longshield
+skeleton			fs_spearman
+indiv_range			40
+texture				gauls, data/models_unit/textures/unit_barb_warband_longshield_gaul.tga
+model_flexi			data/models_unit/unit_barb_warband_longshield_high.CAS, 8
+model_sprite		gauls, 60.0, data/sprites/gauls_barb_infantry_longshield_sprite.spr
+model_tri			400, 0.5f, 0.5f, 0.5f
+
+type				greek_hoplite
+skeleton			fs_spearman, fs_swordsman
+indiv_range			40
+texture				greek_cities, data/models_unit/textures/unit_greek_hoplite_greek.tga
+model_flexi			data/models_unit/unit_greek_hoplite_high.cas, 15
+model_sprite		greek_cities, 60.0, data/sprites/greek_cities_greek_hoplite_sprite.spr
+model_tri			400, 0.5f, 0.5f, 0.5f
+
+type				gallic_mercenary
+skeleton			fs_spearman
+indiv_range			40
+texture				gauls, data/models_unit/textures/unit_barb_warband_longshield_gaul.tga
+model_flexi			data/models_unit/unit_barb_warband_longshield_high.CAS, 8
+model_sprite		gauls, 60.0, data/sprites/gauls_gallic_mercenary_sprite.spr
+model_tri			400, 0.5f, 0.5f, 0.5f
+
+type				greek_mercenary
+skeleton			fs_spearman, fs_swordsman
+indiv_range			40
+texture				greek_cities, data/models_unit/textures/unit_greek_hoplite_greek.tga
+model_flexi			data/models_unit/unit_greek_hoplite_high.cas, 15
+model_sprite		greek_cities, 60.0, data/sprites/greek_cities_greek_mercenary_sprite.spr
+model_tri			400, 0.5f, 0.5f, 0.5f
+
+type				free_company_merc
+skeleton			fs_semi_fast_javelinman, fs_semi_fast_dagger
+indiv_range			40
+texture			merc, data/models_unit/textures/unit_free_company.tga
+model_flexi		data/models_unit/unit_free_company_high.cas, 15
+model_sprite		60.0, data/sprites/free_company_merc_sprite.spr
+model_tri			400, 0.5f, 0.5f, 0.5f

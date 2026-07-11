@@ -62,7 +62,11 @@ func (s *ProjectileService) Delete(name string) error {
 }
 
 func (s *ProjectileService) GetChangeType(name string) string {
-	switch s.repo.GetChanges()[name] {
+	ct, ok := s.repo.GetChanges()[name]
+	if !ok {
+		return "none"
+	}
+	switch ct {
 	case repository.ChangeModified:
 		return "modified"
 	case repository.ChangeAdded:

@@ -128,6 +128,11 @@ type App struct {
 	// Shared between RTW and M2TW: descr_projectile.txt format is identical.
 	projectileService *service.ProjectileService
 	projectileRepo    repository.ProjectileRepository
+	// Mercenaries (shared format; scoped to one campaign at a time, nil until
+	// LoadMercenaryCampaign is called — see world/maps/campaign/<name>/descr_mercenaries.txt)
+	mercenaryService  *service.MercenaryService
+	mercenaryRepo     repository.MercenaryRepository
+	mercenaryCampaign string
 	// Shared writer (non-nil after InitGame)
 	gameWriter *writer.GameWriter
 }
@@ -215,15 +220,29 @@ func (a *App) InitGame(gamePath string, gameVersion config.GameVersion) error {
 
 	p := parser.New(gameVersion, gamePath)
 	a.gameWriter = writer.New(gamePath)
+	a.gameWriter.SetBaseGameDataPath(a.baseGameDataPath)
 
+	// Vanilla installs often ship descr_projectile(_new).txt packed inside a .pak
+	// archive rather than as a loose file — that's not an error, just means this
+	// mod/game has no editable projectiles (see ProjectilesAvailable).
 	projectileFile, err := parser.ParseProjectileFile(gamePath)
 	if err != nil {
-		return fmt.Errorf("parse projectiles error: %w", err)
+		a.projectileRepo = nil
+		a.projectileService = nil
+		logger.Info("no projectile file found, projectiles editor disabled", "path", gamePath)
+	} else {
+		projRepo := repository.NewProjectile(*projectileFile)
+		a.projectileRepo = projRepo
+		a.projectileService = service.NewProjectileService(projRepo)
+		logger.Info("projectiles loaded", "count", len(projectileFile.Projectiles))
 	}
-	projRepo := repository.NewProjectile(*projectileFile)
-	a.projectileRepo = projRepo
-	a.projectileService = service.NewProjectileService(projRepo)
-	logger.Info("projectiles loaded", "count", len(projectileFile.Projectiles))
+
+	// Mercenaries are scoped to a campaign the user picks explicitly (see
+	// GetMercenaryCampaigns/LoadMercenaryCampaign) — a new game/mod invalidates
+	// whichever campaign was previously loaded.
+	a.mercenaryService = nil
+	a.mercenaryRepo = nil
+	a.mercenaryCampaign = ""
 
 	if gameVersion == config.Medieval {
 		gameData, err := p.ParseM2TW()
@@ -327,7 +346,9 @@ func (a *App) UpdateUnit(originalType string, unit domain.Unit) error {
 }
 
 func (a *App) HasUnsavedChanges() bool {
-	return a.unitService.HasUnsavedChanges() || a.projectileService.HasUnsavedChanges()
+	return a.unitService.HasUnsavedChanges() ||
+		(a.projectileService != nil && a.projectileService.HasUnsavedChanges()) ||
+		a.MercenariesHasUnsavedChanges()
 }
 
 // RestoreOriginalFiles discards every change ever made to the currently loaded
@@ -355,7 +376,12 @@ func (a *App) Save() error {
 		return err
 	}
 	a.rtwRepo.CommitSave()
-	a.projectileRepo.CommitSave()
+	if a.projectileRepo != nil {
+		a.projectileRepo.CommitSave()
+	}
+	if a.mercenaryRepo != nil {
+		a.mercenaryRepo.CommitSave()
+	}
 	logger.OpDone("save", nil)
 	return nil
 }
@@ -379,23 +405,44 @@ func (a *App) GetUnitBuildings(unitType string) []domain.RecruitLocation {
 
 // ── Projectiles (shared between RTW and M2TW) ────────────────────────────────
 
+// ProjectilesAvailable reports whether this mod/game has a loose descr_projectile
+// (_new).txt to edit — false for vanilla installs that keep it packed in a .pak.
+func (a *App) ProjectilesAvailable() bool {
+	return a.projectileService != nil
+}
+
 func (a *App) GetProjectiles() []domain.Projectile {
+	if a.projectileService == nil {
+		return nil
+	}
 	return a.projectileService.GetAll()
 }
 
 func (a *App) GetProjectileDelays() []domain.ProjectileDelay {
+	if a.projectileService == nil {
+		return nil
+	}
 	return a.projectileService.GetDelays()
 }
 
 func (a *App) GetProjectileByName(name string) (*domain.Projectile, error) {
+	if a.projectileService == nil {
+		return nil, fmt.Errorf("no projectile file loaded")
+	}
 	return a.projectileService.GetByName(name)
 }
 
 func (a *App) GetProjectileChangeType(name string) string {
+	if a.projectileService == nil {
+		return "none"
+	}
 	return a.projectileService.GetChangeType(name)
 }
 
 func (a *App) UpdateProjectile(originalName string, p domain.Projectile) error {
+	if a.projectileService == nil {
+		return fmt.Errorf("no projectile file loaded")
+	}
 	logger.OpStart("update_projectile", p.Name)
 	if err := a.projectileService.Update(originalName, p); err != nil {
 		logger.OpDone("update_projectile", err)
@@ -407,6 +454,9 @@ func (a *App) UpdateProjectile(originalName string, p domain.Projectile) error {
 }
 
 func (a *App) CreateProjectile(templateName, newName string) error {
+	if a.projectileService == nil {
+		return fmt.Errorf("no projectile file loaded")
+	}
 	logger.OpStart("create_projectile", fmt.Sprintf("%s from %s", newName, templateName))
 	if err := a.projectileService.Create(templateName, newName); err != nil {
 		logger.OpDone("create_projectile", err)
@@ -418,6 +468,9 @@ func (a *App) CreateProjectile(templateName, newName string) error {
 }
 
 func (a *App) DeleteProjectile(name string) error {
+	if a.projectileService == nil {
+		return fmt.Errorf("no projectile file loaded")
+	}
 	logger.OpStart("delete_projectile", name)
 	if err := a.projectileService.Delete(name); err != nil {
 		logger.OpDone("delete_projectile", err)
@@ -429,11 +482,185 @@ func (a *App) DeleteProjectile(name string) error {
 }
 
 func (a *App) RevertProjectile(name string) error {
+	if a.projectileService == nil {
+		return nil
+	}
 	return a.projectileService.Revert(name)
 }
 
 func (a *App) RevertAllProjectiles() {
+	if a.projectileService == nil {
+		return
+	}
 	a.projectileService.RevertAll()
+}
+
+// ── Mercenaries (shared between RTW and M2TW, scoped to one campaign) ───────────
+
+// GetMercenaryCampaigns lists campaign folders (relative to world/maps/campaign/,
+// e.g. "imperial_campaign", "custom/Fourth_Era") that have a descr_mercenaries.txt.
+// GetMercenaryCampaigns merges campaigns found in the mod with those found in the base
+// game (deduplicated) — most mods don't ship their own campaign map and rely entirely on
+// the base game's, the same mod-then-base convention as App.findAsset.
+func (a *App) GetMercenaryCampaigns() []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, root := range a.mercenaryRoots() {
+		for _, c := range parser.ListMercenaryCampaigns(root) {
+			if !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// mercenaryRoots returns the mod path and, if present, the base game data path — in the
+// order file lookups should prefer them.
+func (a *App) mercenaryRoots() []string {
+	roots := []string{a.gamePath}
+	if a.baseGameDataPath != "" {
+		roots = append(roots, a.baseGameDataPath)
+	}
+	return roots
+}
+
+// LoadMercenaryCampaign parses campaign's descr_mercenaries.txt and descr_regions.txt,
+// making GetMercenaryPools/GetMercenaryRegions and the edit methods below operate on it.
+// Switching campaigns discards any unsaved in-memory mercenary edits for the previous one.
+// The campaign's own files take priority; if the mod doesn't ship them, the base game's
+// copy is read instead (see mercenaryRoots).
+func (a *App) LoadMercenaryCampaign(campaign string) error {
+	logger.OpStart("load_mercenary_campaign", campaign)
+
+	root := a.gamePath
+	for _, r := range a.mercenaryRoots() {
+		if _, err := os.Stat(parser.MercenariesFilePath(r, campaign)); err == nil {
+			root = r
+			break
+		}
+	}
+
+	file, err := parser.ParseMercenaryFile(parser.MercenariesFilePath(root, campaign))
+	if err != nil {
+		logger.OpDone("load_mercenary_campaign", err)
+		return err
+	}
+	regions, err := parser.ParseRegionNames(parser.RegionsFilePath(root, campaign))
+	if err != nil {
+		regions = nil // regions are reference-only; missing file shouldn't block loading
+	}
+
+	repo := repository.NewMercenaryRepository(*file)
+	a.mercenaryRepo = repo
+	a.mercenaryService = service.NewMercenaryService(repo, regions)
+	a.mercenaryCampaign = campaign
+
+	logger.OpDone("load_mercenary_campaign", nil)
+	return nil
+}
+
+func (a *App) GetMercenaryPools() []domain.MercenaryPool {
+	if a.mercenaryService == nil {
+		return nil
+	}
+	return a.mercenaryService.GetPools()
+}
+
+func (a *App) GetMercenaryRegions() []string {
+	if a.mercenaryService == nil {
+		return nil
+	}
+	return a.mercenaryService.GetRegions()
+}
+
+func (a *App) GetMercenaryPoolByName(name string) (*domain.MercenaryPool, error) {
+	if a.mercenaryService == nil {
+		return nil, fmt.Errorf("no mercenary campaign loaded")
+	}
+	return a.mercenaryService.GetPoolByName(name)
+}
+
+func (a *App) UpdateMercenaryPool(originalName string, regions []string, units []domain.MercenaryUnit) error {
+	if a.mercenaryService == nil {
+		return fmt.Errorf("no mercenary campaign loaded")
+	}
+	logger.OpStart("update_mercenary_pool", originalName)
+	if err := a.mercenaryService.UpdatePool(originalName, regions, units); err != nil {
+		logger.OpDone("update_mercenary_pool", err)
+		return err
+	}
+	err := a.gameWriter.SaveMercenariesDraft(a.mercenaryCampaign, a.mercenaryRepo.GetData(), a.mercenaryRepo.GetChanges())
+	logger.OpDone("update_mercenary_pool", err)
+	return err
+}
+
+func (a *App) RenameMercenaryPool(originalName, newName string) error {
+	if a.mercenaryService == nil {
+		return fmt.Errorf("no mercenary campaign loaded")
+	}
+	logger.OpStart("rename_mercenary_pool", fmt.Sprintf("%s → %s", originalName, newName))
+	if err := a.mercenaryService.Rename(originalName, newName); err != nil {
+		logger.OpDone("rename_mercenary_pool", err)
+		return err
+	}
+	err := a.gameWriter.SaveMercenariesDraft(a.mercenaryCampaign, a.mercenaryRepo.GetData(), a.mercenaryRepo.GetChanges())
+	logger.OpDone("rename_mercenary_pool", err)
+	return err
+}
+
+func (a *App) CreateMercenaryPool(name string, regions []string) error {
+	if a.mercenaryService == nil {
+		return fmt.Errorf("no mercenary campaign loaded")
+	}
+	logger.OpStart("create_mercenary_pool", name)
+	if err := a.mercenaryService.CreatePool(name, regions); err != nil {
+		logger.OpDone("create_mercenary_pool", err)
+		return err
+	}
+	err := a.gameWriter.SaveMercenariesDraft(a.mercenaryCampaign, a.mercenaryRepo.GetData(), a.mercenaryRepo.GetChanges())
+	logger.OpDone("create_mercenary_pool", err)
+	return err
+}
+
+func (a *App) DeleteMercenaryPool(name string) error {
+	if a.mercenaryService == nil {
+		return fmt.Errorf("no mercenary campaign loaded")
+	}
+	logger.OpStart("delete_mercenary_pool", name)
+	if err := a.mercenaryService.DeletePool(name); err != nil {
+		logger.OpDone("delete_mercenary_pool", err)
+		return err
+	}
+	err := a.gameWriter.SaveMercenariesDraft(a.mercenaryCampaign, a.mercenaryRepo.GetData(), a.mercenaryRepo.GetChanges())
+	logger.OpDone("delete_mercenary_pool", err)
+	return err
+}
+
+func (a *App) GetMercenaryPoolChangeType(name string) string {
+	if a.mercenaryService == nil {
+		return "none"
+	}
+	return a.mercenaryService.GetChangeType(name)
+}
+
+func (a *App) RevertMercenaryPool(name string) error {
+	if a.mercenaryService == nil {
+		return nil
+	}
+	return a.mercenaryService.Revert(name)
+}
+
+func (a *App) RevertAllMercenaries() {
+	if a.mercenaryService != nil {
+		a.mercenaryService.RevertAll()
+	}
+}
+
+func (a *App) MercenariesHasUnsavedChanges() bool {
+	return a.mercenaryService != nil && a.mercenaryService.HasUnsavedChanges()
 }
 
 func (a *App) CopyUnit(unitType, faction string) (string, error) {
@@ -462,6 +689,21 @@ func (a *App) CreateUnit(templateType, newType, faction string) error {
 	_ = a.gameWriter.CopyUnitModelAssets(soldierModel, templateType, newType, srcFaction, faction)
 	err := a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges())
 	logger.OpDone("create_unit", err)
+	return err
+}
+
+// AddUnitToFaction grants an existing unit (e.g. a mercenary) to another faction, reusing
+// its current soldier model/texture and copying only the icon — no new unit type is created.
+func (a *App) AddUnitToFaction(unitType, faction string) error {
+	logger.OpStart("add_unit_to_faction", fmt.Sprintf("%s → %s", unitType, faction))
+	srcFaction, soldierModel, err := a.unitService.AddFactionToUnit(unitType, faction)
+	if err != nil {
+		logger.OpDone("add_unit_to_faction", err)
+		return err
+	}
+	_ = a.gameWriter.CopyUnitModelAssets(soldierModel, unitType, unitType, srcFaction, faction)
+	err = a.gameWriter.SaveDraft(a.rtwRepo.GetData(), a.rtwRepo.GetChanges())
+	logger.OpDone("add_unit_to_faction", err)
 	return err
 }
 
@@ -814,6 +1056,26 @@ func (a *App) CreateM2TWUnit(templateType, newType, faction string) error {
 	return err
 }
 
+// AddM2TWUnitToFaction grants an existing unit (e.g. a mercenary) to another faction,
+// reusing its current soldier model/texture and copying only the icon — no new unit type
+// or modeldb entry is created.
+func (a *App) AddM2TWUnitToFaction(unitType, faction string) error {
+	if a.m2twUnitService == nil {
+		return fmt.Errorf("M2TW not loaded")
+	}
+	logger.OpStart("add_m2tw_unit_to_faction", fmt.Sprintf("%s → %s", unitType, faction))
+	srcFaction, soldierModel, err := a.m2twUnitService.AddFactionToUnit(unitType, faction)
+	if err != nil {
+		logger.OpDone("add_m2tw_unit_to_faction", err)
+		return err
+	}
+	_ = a.gameWriter.PatchSoldierFactionDraft(soldierModel, srcFaction, faction)
+	_ = a.gameWriter.CopyUnitCardDraft(unitType, unitType, srcFaction, faction)
+	err = a.gameWriter.SaveM2TWDraft(a.m2twRepo.GetData(), a.m2twRepo.GetChanges())
+	logger.OpDone("add_m2tw_unit_to_faction", err)
+	return err
+}
+
 func (a *App) DeleteM2TWUnit(unitType, faction string) error {
 	if a.m2twUnitService == nil {
 		return fmt.Errorf("M2TW not loaded")
@@ -887,7 +1149,8 @@ func (a *App) ValidateM2TWUnit(originalType string, unit domain.M2TWUnit) []stri
 
 func (a *App) M2TWHasUnsavedChanges() bool {
 	return (a.m2twUnitService != nil && a.m2twUnitService.HasUnsavedChanges()) ||
-		(a.projectileService != nil && a.projectileService.HasUnsavedChanges())
+		(a.projectileService != nil && a.projectileService.HasUnsavedChanges()) ||
+		a.MercenariesHasUnsavedChanges()
 }
 
 func (a *App) SaveM2TW() error {
@@ -900,7 +1163,12 @@ func (a *App) SaveM2TW() error {
 		return err
 	}
 	a.m2twRepo.CommitSave()
-	a.projectileRepo.CommitSave()
+	if a.projectileRepo != nil {
+		a.projectileRepo.CommitSave()
+	}
+	if a.mercenaryRepo != nil {
+		a.mercenaryRepo.CommitSave()
+	}
 	logger.OpDone("save_m2tw", nil)
 	return nil
 }

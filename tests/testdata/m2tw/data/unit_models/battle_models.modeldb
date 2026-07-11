@@ -1,0 +1,34 @@
+22 serialization::archive 3 0 0 0 0 3 0 0
+20 english_archers_merc
+1 4
+46 unit_models/english_archers_merc_lod0.mesh 121
+46 unit_models/english_archers_merc_lod1.mesh 900
+47 unit_models/english_archers_merc_lod2.mesh 2500
+47 unit_models/english_archers_merc_lod3.mesh 6400
+1
+7 england
+49 unit_models/textures/english_archers_diff.texture
+49 unit_models/textures/english_archers_norm.texture
+52 unit_sprites/england_english_archers_merc_sprite.spr
+20 byzantine_guard_merc
+1 4
+46 unit_models/byzantine_guard_merc_lod0.mesh 121
+46 unit_models/byzantine_guard_merc_lod1.mesh 900
+47 unit_models/byzantine_guard_merc_lod2.mesh 2500
+47 unit_models/byzantine_guard_merc_lod3.mesh 6400
+1
+9 byzantium
+49 unit_models/textures/byzantine_guard_diff.texture
+49 unit_models/textures/byzantine_guard_norm.texture
+54 unit_sprites/byzantium_byzantine_guard_merc_sprite.spr
+16 free_lances_merc
+1 4
+42 unit_models/free_lances_merc_lod0.mesh 121
+42 unit_models/free_lances_merc_lod1.mesh 900
+43 unit_models/free_lances_merc_lod2.mesh 2500
+43 unit_models/free_lances_merc_lod3.mesh 6400
+1
+4 merc
+45 unit_models/textures/free_lances_diff.texture
+45 unit_models/textures/free_lances_norm.texture
+45 unit_sprites/merc_free_lances_merc_sprite.spr

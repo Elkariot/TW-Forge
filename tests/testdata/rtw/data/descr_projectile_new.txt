@@ -1,0 +1,44 @@
+;
+;	projectile descriptions text file - trimmed test fixture
+;
+
+projectile arrow
+
+damage		0
+radius		0.1
+min_angle	-60
+max_angle	60
+velocity	48
+display		particle_trail
+end
+
+projectile boulder
+
+damage			70
+damage_to_troops 8
+radius			0.3
+mass			0.1
+area			2.0
+accuracy_vs_units		0.09
+accuracy_vs_buildings	0.0625
+min_angle		0
+max_angle		70
+velocity		61
+display			aimed
+end
+
+projectile fiery_boulder
+
+flaming			boulder
+damage			40
+damage_to_troops 30
+radius			0.3
+mass			0.1
+area			2.5
+accuracy_vs_units		0.35
+accuracy_vs_buildings	0.125
+min_angle		0
+max_angle		70
+velocity		61
+display			aimed
+end

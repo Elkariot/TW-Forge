@@ -1,0 +1,33 @@
+;
+; regions list - trimmed test fixture
+;
+
+York_Province
+	York
+	england
+	English_Rebels
+	131 33 125
+	crusade, xbritain
+	5
+	2
+	religions { catholic 90 orthodox 0 islam 0 pagan 5 heretic 5 }
+
+Ragusa_Province
+	Ragusa
+	byzantium
+	Croatian_Rebels
+	177 83 58
+	xbalkans
+	5
+	4
+	religions { catholic 25 orthodox 55 islam 0 pagan 15 heretic 5 }
+
+Vilnius_Province
+	Vilnius
+	lithuania
+	Baltic_Rebels
+	58 89 177
+	xbaltics
+	5
+	3
+	religions { catholic 10 orthodox 5 islam 0 pagan 80 heretic 5 }

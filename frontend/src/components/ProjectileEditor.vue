@@ -3,9 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   GetProjectiles, GetProjectileDelays, UpdateProjectile,
-  GetProjectileChangeType, RevertProjectile, RevertAllProjectiles,
+  GetProjectileChangeType, RevertProjectile, RevertAllProjectiles, ProjectilesAvailable,
+  DeleteProjectile,
 } from '../../wailsjs/go/main/App'
 import { PROJECTILE_FLAGS } from '../enums.js'
+import ProjectileCreateModal from './ProjectileCreateModal.vue'
 
 const { t } = useI18n()
 const emit = defineEmits(['changed'])
@@ -13,6 +15,7 @@ const emit = defineEmits(['changed'])
 const projectiles = ref([])
 const delays = ref([])
 const loading = ref(true)
+const available = ref(true)
 const error = ref(null)
 const search = ref('')
 
@@ -29,9 +32,11 @@ async function load() {
   loading.value = true
   error.value = null
   try {
+    available.value = await ProjectilesAvailable()
+    if (!available.value) return
     const [list, d] = await Promise.all([GetProjectiles(), GetProjectileDelays()])
-    projectiles.value = [...list].sort((a, b) => a.Name.localeCompare(b.Name))
-    delays.value = d
+    projectiles.value = [...(list ?? [])].sort((a, b) => a.Name.localeCompare(b.Name))
+    delays.value = d ?? []
   } catch (e) {
     error.value = String(e)
   } finally {
@@ -43,6 +48,51 @@ const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   if (!q) return projectiles.value
   return projectiles.value.filter(p => p.Name.toLowerCase().includes(q))
+})
+
+// ── Create / delete ─────────────────────────────────────────────────────────
+
+const showCreateModal = ref(false)
+
+async function onProjectileCreated(name) {
+  showCreateModal.value = false
+  await load()
+  const created = projectiles.value.find(p => p.Name === name)
+  if (created) await select(created)
+  emit('changed')
+}
+
+async function deleteProjectile() {
+  if (!confirm(t('projectile.delete_projectile_confirm', { name: selectedName.value }))) return
+  try {
+    await DeleteProjectile(selectedName.value)
+    await load()
+    selectedName.value = null
+    projectile.value = null
+    edited.value = null
+    emit('changed')
+  } catch (e) {
+    error.value = String(e)
+  }
+}
+
+// ── Effect fields: free-choice dropdowns backed by values already used
+// elsewhere in the loaded file (see feedback: no new-animation authoring yet,
+// only picking among existing effect names) ───────────────────────────────
+
+const EFFECT_FIELDS = [
+  'Effect', 'EndEffect', 'EndManEffect', 'EndPackageEffect',
+  'EndShatterEffect', 'EndShatterManEffect', 'EndShatterPackageEffect',
+]
+
+const effectOptions = computed(() => {
+  const set = new Set()
+  for (const p of projectiles.value) {
+    for (const f of EFFECT_FIELDS) {
+      if (p[f]) set.add(p[f])
+    }
+  }
+  return [...set].sort()
 })
 
 function cloneEdit(p) {
@@ -175,7 +225,9 @@ async function revertAll() {
 </script>
 
 <template>
-  <div class="pe-root">
+  <div v-if="loading" class="pe-root pe-root--empty">{{ $t('common.loading') }}</div>
+  <div v-else-if="!available" class="pe-root pe-root--empty">{{ $t('projectile.no_file') }}</div>
+  <div v-else class="pe-root">
 
     <!-- Список снарядов -->
     <div class="pe-list">
@@ -190,8 +242,7 @@ async function revertAll() {
         </div>
       </div>
 
-      <div v-if="loading" class="pe-hint">{{ $t('common.loading') }}</div>
-      <div v-else-if="filtered.length === 0" class="pe-hint">{{ $t('common.nothing_found') }}</div>
+      <div v-if="filtered.length === 0" class="pe-hint">{{ $t('common.nothing_found') }}</div>
       <ul v-else class="pe-items">
         <li
           v-for="p in filtered"
@@ -201,8 +252,19 @@ async function revertAll() {
         >{{ p.Name }}</li>
       </ul>
 
+      <div class="pe-add-row">
+        <button class="btn-add-projectile" @click="showCreateModal = true">+ {{ $t('projectile.add_projectile') }}</button>
+      </div>
+
       <button class="pe-revert-all" @click="revertAll">{{ $t('projectile.revert_all') }}</button>
     </div>
+
+    <ProjectileCreateModal
+      v-if="showCreateModal"
+      :projectiles="projectiles"
+      @close="showCreateModal = false"
+      @created="onProjectileCreated"
+    />
 
     <!-- Детали снаряда -->
     <div class="pe-detail">
@@ -222,6 +284,7 @@ async function revertAll() {
               <button class="btn-cancel" @click="cancel">{{ $t('common.cancel') }}</button>
             </template>
             <button v-else-if="changeType !== 'none'" class="btn-revert" @click="revertOne">↺</button>
+            <button class="btn-delete-projectile" @click="deleteProjectile">{{ $t('projectile.delete_projectile') }}</button>
             <span v-if="error" class="pe-error">{{ error }}</span>
           </div>
         </div>
@@ -338,6 +401,25 @@ async function revertAll() {
               </div>
             </section>
 
+            <section class="stat-section">
+              <h3>{{ $t('projectile.section_effects') }}</h3>
+              <div class="grid">
+                <label class="full" :title="$t('projectile.field_effect_hint')">
+                  {{ $t('projectile.field_effect') }}
+                  <input v-model="edited.Effect" list="pe-effect-options" @input="markDirty" />
+                </label>
+                <label>{{ $t('projectile.field_end_effect') }}<input v-model="edited.EndEffect" list="pe-effect-options" @input="markDirty" /></label>
+                <label>{{ $t('projectile.field_end_man_effect') }}<input v-model="edited.EndManEffect" list="pe-effect-options" @input="markDirty" /></label>
+                <label>{{ $t('projectile.field_end_package_effect') }}<input v-model="edited.EndPackageEffect" list="pe-effect-options" @input="markDirty" /></label>
+                <label>{{ $t('projectile.field_end_shatter_effect') }}<input v-model="edited.EndShatterEffect" list="pe-effect-options" @input="markDirty" /></label>
+                <label>{{ $t('projectile.field_end_shatter_man_effect') }}<input v-model="edited.EndShatterManEffect" list="pe-effect-options" @input="markDirty" /></label>
+                <label>{{ $t('projectile.field_end_shatter_package_effect') }}<input v-model="edited.EndShatterPackageEffect" list="pe-effect-options" @input="markDirty" /></label>
+              </div>
+              <datalist id="pe-effect-options">
+                <option v-for="opt in effectOptions" :key="opt" :value="opt" />
+              </datalist>
+            </section>
+
           </div>
         </div>
       </template>
@@ -352,6 +434,7 @@ async function revertAll() {
 
 <style scoped>
 .pe-root { display: flex; height: 100%; overflow: hidden; }
+.pe-root--empty { align-items: center; justify-content: center; color: var(--color-text-muted); font-size: 13px; }
 
 /* Список */
 .pe-list {
@@ -375,6 +458,11 @@ async function revertAll() {
   padding: 5px 8px;
 }
 .pe-search:focus { outline: none; border-color: var(--color-accent); }
+.pe-filter-select {
+  background: var(--color-cell); border: 1px solid var(--color-border-soft); border-radius: 4px;
+  color: var(--color-text-dim); font-size: 11px; padding: 4px 6px; flex: 1;
+}
+.pe-filter-select:focus { outline: none; border-color: var(--color-accent); }
 
 .pe-delays { margin-bottom: 10px; }
 .pe-delays-title { font-size: 10px; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: 0.05em; margin-bottom: 4px; }
@@ -405,6 +493,23 @@ async function revertAll() {
   flex-shrink: 0;
 }
 .pe-revert-all:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+.pe-add-row { margin-top: 8px; }
+.btn-add-projectile {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-primary);
+  border: none;
+  color: var(--color-text);
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-add-projectile:hover { background: var(--color-primary-hover); }
+.btn-delete-projectile { background: transparent; border: 1px solid var(--color-error); color: var(--color-error); border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; }
+.btn-delete-projectile:hover { background: var(--color-error); color: var(--color-text); }
 
 /* Детали */
 .pe-detail { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
