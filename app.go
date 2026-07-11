@@ -369,6 +369,74 @@ func (a *App) RestoreOriginalFiles() error {
 	return err
 }
 
+// ── Mod templates: named snapshots of the mod's on-disk state, so a bad experiment
+// with one faction's balance can be rolled back without losing an earlier, unrelated
+// faction's balance work (see writer.GameWriter.CreateTemplate/LoadTemplate). ────────
+
+func (a *App) ListTemplates() ([]domain.TemplateInfo, error) {
+	if a.gameWriter == nil {
+		return nil, nil
+	}
+	return a.gameWriter.ListTemplates()
+}
+
+func (a *App) GetTemplateState() domain.TemplateState {
+	if a.gameWriter == nil {
+		return domain.TemplateState{}
+	}
+	return a.gameWriter.GetTemplateState()
+}
+
+// CreateTemplate snapshots the game files as they currently stand on disk under a new
+// name. Called either from the templates toolbar directly, or as the "save before I
+// apply these changes" step offered when the user clicks "Apply to game".
+func (a *App) CreateTemplate(name string) error {
+	if a.gameWriter == nil {
+		return fmt.Errorf("no game loaded")
+	}
+	logger.OpStart("create_template", name)
+	err := a.gameWriter.CreateTemplate(name)
+	logger.OpDone("create_template", err)
+	return err
+}
+
+// SwitchTemplate overwrites the game files with the named template's files and reloads
+// all in-memory game state from disk — same reset pattern as RestoreOriginalFiles. Any
+// unsaved edits (in-memory or applied-but-uncaptured) are lost; the frontend is
+// responsible for warning the user before calling this (see GetTemplateState().Dirty).
+func (a *App) SwitchTemplate(name string) error {
+	if a.gameWriter == nil {
+		return fmt.Errorf("no game loaded")
+	}
+	logger.OpStart("switch_template", name)
+	if err := a.gameWriter.LoadTemplate(name); err != nil {
+		logger.OpDone("switch_template", err)
+		return err
+	}
+	err := a.InitGame(a.gamePath, a.gameVersion)
+	logger.OpDone("switch_template", err)
+	return err
+}
+
+func (a *App) DeleteTemplate(name string) error {
+	if a.gameWriter == nil {
+		return fmt.Errorf("no game loaded")
+	}
+	logger.OpStart("delete_template", name)
+	err := a.gameWriter.DeleteTemplate(name)
+	logger.OpDone("delete_template", err)
+	return err
+}
+
+// ClearCurrentTemplate detaches from the current template ("no template" in the
+// dropdown) without touching any game files — always safe, no reload needed.
+func (a *App) ClearCurrentTemplate() error {
+	if a.gameWriter == nil {
+		return fmt.Errorf("no game loaded")
+	}
+	return a.gameWriter.ClearTemplate()
+}
+
 func (a *App) Save() error {
 	logger.OpStart("save", "apply to game")
 	if err := a.gameWriter.Apply(); err != nil {

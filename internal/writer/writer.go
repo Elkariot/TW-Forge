@@ -20,20 +20,24 @@ var managedFiles = []string{
 }
 
 type GameWriter struct {
-	gamePath         string
-	baseGameDataPath string // fallback source root for files the mod itself doesn't ship
-	backupPath       string
-	draftPath        string
-	initOnce         sync.Once
-	initErr          error
+	gamePath          string
+	baseGameDataPath  string // fallback source root for files the mod itself doesn't ship
+	backupPath        string
+	draftPath         string
+	templatesPath     string
+	templateStatePath string
+	initOnce          sync.Once
+	initErr           error
 }
 
 func New(gamePath string) *GameWriter {
 	editorRoot := filepath.Join(filepath.Dir(gamePath), "_modding_editor")
 	return &GameWriter{
-		gamePath:   gamePath,
-		backupPath: filepath.Join(editorRoot, "backup"),
-		draftPath:  filepath.Join(editorRoot, "draft"),
+		gamePath:          gamePath,
+		backupPath:        filepath.Join(editorRoot, "backup"),
+		draftPath:         filepath.Join(editorRoot, "draft"),
+		templatesPath:     filepath.Join(editorRoot, "templates"),
+		templateStatePath: filepath.Join(editorRoot, "template_state.json"),
 	}
 }
 
@@ -120,7 +124,12 @@ func (w *GameWriter) Apply() error {
 	if err := w.applyDirRecursive("ui"); err != nil {
 		return err
 	}
-	return w.applyMercenariesCampaigns()
+	if err := w.applyMercenariesCampaigns(); err != nil {
+		return err
+	}
+	// If a template is active, fold what just landed on disk into it (see
+	// syncCurrentTemplate in template_writer.go).
+	return w.syncCurrentTemplate()
 }
 
 // RestoreFromBackup copies every backed-up text file (managedFiles, the M2TW modeldb,
@@ -154,6 +163,8 @@ func (w *GameWriter) RestoreFromBackup() error {
 	if err := w.restoreMercenariesCampaigns(); err != nil {
 		return fmt.Errorf("restore mercenaries: %w", err)
 	}
+	// Back to vanilla — no template applies anymore.
+	_ = w.saveTemplateState(domain.TemplateState{})
 	return os.RemoveAll(w.draftPath)
 }
 
